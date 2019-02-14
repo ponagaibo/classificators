@@ -1,4 +1,3 @@
-import csv
 import pandas as pd
 import numpy as np
 import random
@@ -7,6 +6,7 @@ import math
 
 
 MAX_DEPTH = 3
+headers = None
 
 
 class Leaf:
@@ -28,25 +28,24 @@ class Question:
 
     def match(self, example):
         val = example[self.column]
-        return val >= self.value  # mb '>=' for later real values
+        return val >= self.value
 
     def __repr__(self):
         return "Q: Is %s >= %s?" % (headers[self.column], str(self.value))
 
 
-df = pd.read_csv('little_data.tsv', delimiter='\t', encoding='utf-8')
-headers = df.dtypes.index.values  # list of strings - names of features (all)
-data_feature_names = headers[:-1]
-data = df[data_feature_names].values
-target_name = headers[-1]
-target = df[target_name].values
-# print("data:")
-# print(data)
-# print('target:')
-# print(target)
+def load_tsv():
+    df = pd.read_csv('little_data.tsv', delimiter='\t', encoding='utf-8')
+    global headers
+    headers = df.dtypes.index.values
+    data_feature_names = headers[:-1]
+    data = df[data_feature_names].values
+    target_name = headers[-1]
+    target = df[target_name].values
+    return data, target
 
 
-def generate_sets():
+def generate_sets(data, target):
     train_size = int(len(data) * 0.7)
     train_ind = sorted(random.sample(range(len(data)), train_size))
     test_ind = [i for i in range(len(data)) if i not in train_ind]
@@ -58,14 +57,10 @@ def generate_sets():
     test_data = [data[i] for i in test_ind]
     test_target = [target[i] for i in test_ind]
     test_set = [test_data, test_target]
-
-    # for i in range(len(train_set[0])):
-    #    print(str(train_set[0][i]) + " => " + str(train_set[1][i]))
     return train_set, test_set
 
 
 def count_class(examples):
-    # pp(examples)
     counts = {}
     targets = examples[1]
     for t in targets:
@@ -73,7 +68,6 @@ def count_class(examples):
             counts[t] = 1
         else:
             counts[t] += 1
-    # print(counts)
     return counts
 
 
@@ -97,22 +91,14 @@ def divide_data(examples, question):
 
 def entropy(examples):
     in_class, not_in_class = 0, 0
-    # print('\ndata')
-    # print(data)
-    # print(target)
-    # print('ex in entr')
-    # pp(examples)
     targets = examples[1]
-    # print('tar')
-    # print(targets)
     whole_size = len(examples[0])
-    # print('whole size:' + str(whole_size))
+    # only two classes - if 1 => in class, not in class otherwise
     for t in targets:
         if t == 1:
             in_class += 1
         else:
             not_in_class += 1
-    # print('in class: ' + str(in_class) + ", not in class: " + str(not_in_class))
     if in_class == 0 or not_in_class == 0:
         return 0
     p_in = in_class / whole_size
@@ -126,20 +112,12 @@ def info_gain(true_branch, false_branch, whole_entropy):
     sum_ent = 0
     whole_size = len(true_branch[0]) + len(false_branch[0])
     branches = [true_branch, false_branch]
-    # print('\nbranches:')
-    # pp(branches)
-    # print('whole_entropy: ' + str(whole_entropy))
     for b in branches:
         this_data = b[0]
-        # pp(data)
         cur_size = len(this_data)
-        # print('cur size: ' + str(cur_size))
-        # print(b)
         e = entropy(b)
-        # print('cur entropy: ' + str(e))
         sum_ent += cur_size * e / whole_size
     info = whole_entropy - sum_ent
-    # print('total info: ' + str(info))
     return info
 
 
@@ -158,16 +136,13 @@ def gain_ratio(true_branch, false_branch, whole_entropy):
 
 
 def best_question(examples):
+    data_feature_names = headers[:-1]
     n_features = len(data_feature_names)
     best_gain_ratio = 0
     best_q = None
     cur_entropy = entropy(examples)
-    # print("examples: ")
-    # pp(examples)
     for col in range(1, n_features):
         distinct_val = sorted(set(ex[col] for ex in examples[0]))
-        # print("dist vals: ")
-        # print(distinct_val)
         for val in distinct_val:
             q = Question(col, val)
             true_branch, false_branch = divide_data(examples, q)
@@ -181,9 +156,6 @@ def best_question(examples):
 
 
 def build_tree(examples, cur_depth):
-    # print('\n')
-    # pp(examples)
-    # print('===============')
     if cur_depth == MAX_DEPTH:
         print("max depth reached!")
         return Leaf(examples)
@@ -192,8 +164,6 @@ def build_tree(examples, cur_depth):
         return Leaf(examples)
 
     true_branch, false_branch = divide_data(examples, question)
-    # pp(true_branch)
-    # pp(false_branch)
     true_branch = build_tree(true_branch, cur_depth + 1)
     false_branch = build_tree(false_branch, cur_depth + 1)
     return FeatureNode(question, true_branch, false_branch)
@@ -230,15 +200,14 @@ def classify(dataset, node):
 
 
 def question_number(question):
+    data_feature_names = headers[:-1]
     num = np.where(data_feature_names == question)
     return num[0][0]
 
 
 def main():
-    train_set, test_set = generate_sets()
-    # num = question_number('has_sport')
-    # info_gain(train_set, num)
-    # best_question(train_set)
+    data, target = load_tsv()
+    train_set, test_set = generate_sets(data, target)
     root = build_tree(train_set, 0)
     print_tree(root)
     test_data = test_set[0]
@@ -248,7 +217,6 @@ def main():
     for i in range(len(test_set[0])):
         c = classify(test_data[i], root)
         print("Real: %s. Predicted: %s" % (test_target[i], print_leaf(c)))
-    # pp(test_set[0][0])
 
 
 main()
