@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, log2
 import pandas as pd
 from pprint import pprint as pp
 import random
@@ -48,7 +48,7 @@ def generate_sets(data, target, split):
     return train_set, test_set
 
 
-def find_a_priori_prob(training_set):
+def find_class_freqs(training_set):
     target = training_set[1]
     probs = {}
     for t in target:
@@ -80,40 +80,112 @@ def create_buckets(values, num_of_buckets):
     return feature_buckets
 
 
-def categorize(examples, num_of_buckets):
+def categorize_train_set(examples, num_of_buckets):
     new_set = copy.deepcopy(examples)
     list_of_buckets = []
 
-    for k in range(1, len(new_set[0][0])):
-        feature_buckets = []
-        values = sorted({val[k] for val in new_set[0]})
-        list_of_buckets.append(create_buckets(values, num_of_buckets))
+    for col in range(1, len(new_set[0][0])):
+        values = sorted({val[col] for val in new_set[0]})
+        feature_buckets = create_buckets(values, num_of_buckets)
+        list_of_buckets.append(feature_buckets)
 
         for i in range(len(new_set[0])):
             for j in feature_buckets:
-                val = new_set[0][i][k]
+                val = new_set[0][i][col]
                 if j.start < val <= j.end:
-                    new_set[0][i][k] = j.label
+                    new_set[0][i][col] = j.label
                     break
     return new_set, list_of_buckets
+
+
+def categorize_test_set(test_set, buckets):
+    new_test_set = copy.deepcopy(test_set)
+    for col in range(1, len(buckets) + 1):
+        for i in range(len(new_test_set[0])):
+            val = new_test_set[0][i][col]
+            for j in buckets[col - 1]:
+                if j.start < val <= j.end:
+                    new_test_set[0][i][col] = j.label
+                    break
+    return new_test_set
+
+
+def get_elem(examples, class_name, feature_num=-1, feature_val=-1):
+    cnt = 1
+    if feature_num == -1 and feature_val == -1:
+        for ex, t in zip(examples[0], examples[1]):
+            if t == class_name:
+                cnt += 1
+                # print(ex)
+    else:
+        for ex, t in zip(examples[0], examples[1]):
+            if ex[feature_num] == feature_val and t == class_name:
+                cnt += 1
+    return cnt
+
+
+def get_elems_of_class(examples, class_name):
+    for ex, t in zip(examples[0], examples[1]):
+        if t == class_name:
+            yield ex
+
+
+def classify(train_set, test_set):
+    print("classify this examples: ")
+    pp(test_set)
+    classes = []
+    for ex in test_set[0]:
+        max_ans = float('-inf')
+        my_class = float('-inf')
+        apriori_pr = find_class_freqs(train_set)
+        train_len = len(train_set[0])
+        for cls in apriori_pr.keys():
+            apriori_pr[cls] /= train_len
+        # print(apriori_pr)
+        for cl in {0, 1}:
+            sum = 0
+            # pp(train_set)
+            for col in range(1, len(test_set[0][0])):
+                cur_val = ex[col]
+                cnt_this_val_cl = get_elem(train_set, cl, col, cur_val)
+                # print("col: " + str(col) + ", val: " + str(cur_val) + ", class: " + str(cl))
+                # print(cnt_this_val_cl)
+                cnt_this_cl = get_elem(train_set, cl)
+                # print("in class " + str(cl) + " " + str(cnt_this_cl) + " elems")
+                this_pr = cnt_this_val_cl / cnt_this_cl
+                # print("this prob: " + str(this_pr) + ", log2: " + str(log2(this_pr)))
+                sum += log2(this_pr)
+            sum += log2(apriori_pr[cl])
+            # print("sum = " + str(sum) + ", log2(pr(cl)): " + str(log2(apriori_pr[cl])))
+            if sum >= max_ans:
+                max_ans = sum
+                my_class = cl
+        classes.append(my_class)
+        # print("for " + ex[0] + " class is " + str(my_class))
+    for ex, cl, t in zip(test_set[0], classes, test_set[1]):
+        print("for " + ex[0] + " predict: " + str(cl) + ", real: " + str(t))
+
 
 
 def main():
     data, target = load_tsv()
     split_ratio = 0.7
     training_set, test_set = generate_sets(data, target, split_ratio)
-    # pp(training_set)
-    probs = find_a_priori_prob(training_set)
+    probs = find_class_freqs(training_set)
     print(probs)
     num_of_buckets = 4
-    modified_train_set, buckets = categorize(training_set, num_of_buckets)
-    pp(training_set[0])
-    for i, j in zip(training_set[0], modified_train_set[0]):
+    modified_train_set, buckets = categorize_train_set(training_set, num_of_buckets)
+
+    modified_test_set = categorize_test_set(test_set, buckets)
+    for i, j in zip(test_set[0], modified_test_set[0]):
         print(i)
         print(j)
         print()
     for b in buckets:
         print(b)
+    print()
+    print()
+    classify(modified_train_set, modified_test_set)
 
 
 main()
