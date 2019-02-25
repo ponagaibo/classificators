@@ -5,7 +5,7 @@ from pprint import pprint as pp
 import math
 
 
-MAX_DEPTH = 3
+MAX_DEPTH = 6
 headers = None
 
 
@@ -135,13 +135,20 @@ def gain_ratio(true_branch, false_branch, whole_entropy):
     return gain / split
 
 
-def best_question(examples):
-    data_feature_names = headers[:-1]
+def best_question(examples, rf=False):
+    data_feature_names = headers[1:-1]
     n_features = len(data_feature_names)
+
     best_gain_ratio = 0
     best_q = None
-    cur_entropy = entropy(examples)
-    for col in range(1, n_features):
+    cur_entropy = entropy(examples)  # ???
+
+    if rf:
+        subfeatures_len = round(math.sqrt(n_features))
+        cur_features_num = sorted(random.sample([i for i in range(1, n_features + 1)], subfeatures_len))
+    else:
+        cur_features_num = [i for i in range(1, n_features + 1)]
+    for col in cur_features_num:
         distinct_val = sorted(set(ex[col] for ex in examples[0]))
         for val in distinct_val:
             q = Question(col, val)
@@ -155,31 +162,43 @@ def best_question(examples):
     return best_gain_ratio, best_q
 
 
-def build_tree(examples, cur_depth):
+def build_tree(examples, cur_depth, rf=False):
     if cur_depth == MAX_DEPTH:
         print("max depth reached!")
         return Leaf(examples)
-    gain, question = best_question(examples)
+    gain, question = best_question(examples, rf)
     if gain == 0:
         return Leaf(examples)
 
     true_branch, false_branch = divide_data(examples, question)
-    true_branch = build_tree(true_branch, cur_depth + 1)
-    false_branch = build_tree(false_branch, cur_depth + 1)
+    true_branch = build_tree(true_branch, cur_depth + 1, rf)
+    false_branch = build_tree(false_branch, cur_depth + 1, rf)
     return FeatureNode(question, true_branch, false_branch)
 
 
-def print_leaf(counts):
+def printable_leaf(counts):
     total = sum(counts.values()) * 1.0
     probs = {}
+    # for kk, vv in counts.items():
+    #     print(str(kk) + " : " + str(vv))
     for lbl in counts.keys():
-        probs[lbl] = str(int(counts[lbl] / total * 100)) + "%"
+        probs[lbl] = str(round(counts[lbl] / total * 100)) + "%"
     return probs
+
+
+def main_class(counts):
+    maxVal = -1
+    mainClass = -1
+    for k, v in counts.items():
+        if v > maxVal:
+            maxVal = v
+            mainClass = k
+    return mainClass
 
 
 def print_tree(node, delim=''):
     if isinstance(node, Leaf):
-        print(delim + "Predict", print_leaf(node.predictions))
+        print(delim + "Predict", printable_leaf(node.predictions))
         return
 
     print(delim + str(node.question))
@@ -206,17 +225,56 @@ def question_number(question):
 
 
 def main():
+    # for every tree choose subset and build three
+    # when trees are built, use test set to everyone and collect answers
+    # most popular answer is a global answer
+    num_of_trees = 10
     data, target = load_tsv()
     train_set, test_set = generate_sets(data, target)
-    root = build_tree(train_set, 0)
-    print_tree(root)
+
+    list_of_trees = []
+
+    for _ in range(num_of_trees):
+        build_rf = True
+        sub_data = []
+        sub_target = []
+        for _ in train_set[0]:
+            k = random.randrange(0, len(train_set[0]))
+            sub_data.append(train_set[0][k])
+            sub_target.append(train_set[1][k])
+        sub_train_set = [sub_data, sub_target]
+
+        root = build_tree(sub_train_set, 0, build_rf)
+        # print_tree(root)
+        list_of_trees.append(root)
+
     test_data = test_set[0]
     test_target = test_set[1]
     print("test set: ")
     pp(test_set)
-    for i in range(len(test_set[0])):
-        c = classify(test_data[i], root)
-        print("Real: %s. Predicted: %s" % (test_target[i], print_leaf(c)))
 
+    all_classes = []
+    for i in range(len(test_set[0])):
+        total_classes = {}
+        tree_cnt = 1
+        for tree in list_of_trees:
+            c = classify(test_data[i], tree)
+            # print("tree #" + str(tree_cnt))
+            # print(str(c) + " => ", end="")
+            # print(printable_leaf(c))
+            for kk, vv in c.items():
+                if kk not in total_classes:
+                    total_classes[kk] = 0
+                total_classes[kk] += vv
+            tree_cnt += 1
+        all_classes.append(total_classes)
+
+        print("For %s real: %s. Predicted: %s"
+              % (test_data[i][0], test_target[i], main_class(total_classes)))
+
+    print()
+    for i in range(len(test_set[0])):
+        print("For %s real: %s. Predicted: %s"
+              % (test_data[i][0], test_target[i], main_class(all_classes[i])))
 
 main()
