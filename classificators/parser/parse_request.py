@@ -2,7 +2,6 @@
 from bs4 import BeautifulSoup
 import requests
 import pandas as pd
-import numpy as np
 from pprint import pprint as pp
 
 headers = None
@@ -16,7 +15,7 @@ def load_tsv():
     headers = df.dtypes.index.values
     data_feature_names = headers[:-1]
 
-    data = df[data_feature_names]
+    file_data = df[data_feature_names]
 
     # pp(data)
     # sLength = len(df['has_sport'])
@@ -25,12 +24,12 @@ def load_tsv():
     # pp(data)
 
     target_name = headers[-1]
-    target = df[target_name]
+    file_target = df[target_name]
 
     # data = data.assign(class_sport=pd.Series(target).values)
     # pp(data)
 
-    return data, target
+    return file_data, file_target
 
 
 data, target = load_tsv()
@@ -57,7 +56,7 @@ for t in data['text']:
     # print(url)
 
     page = requests.get(url)
-    page.encoding='utf-8'
+    page.encoding = 'utf-8'
     page_text = page.text
     soup = BeautifulSoup(page_text, features="html.parser")
     print(soup.prettify())
