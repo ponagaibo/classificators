@@ -118,6 +118,7 @@ for t in data['text']:
         hosts_to_check[host] = cnt
         hosts_to_check[host_with_dir] = cnt
         cnt += 1
+        sleep(1)
 
 
     # f_links.close()
