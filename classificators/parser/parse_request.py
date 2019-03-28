@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import requests
 import pandas as pd
 from pprint import pprint as pp
+import time
 
 headers = None
 
@@ -14,29 +15,17 @@ def load_tsv():
     global headers
     headers = df.dtypes.index.values
     data_feature_names = headers[:-1]
-
     file_data = df[data_feature_names]
-
-    # pp(data)
-    # sLength = len(df['has_sport'])
-    # mm = [i*i for i in range(sLength)]
-    # data['toppp']=mm
-    # pp(data)
-
     target_name = headers[-1]
     file_target = df[target_name]
-
-    # data = data.assign(class_sport=pd.Series(target).values)
-    # pp(data)
-
     return file_data, file_target
 
 
 data, target = load_tsv()
-# for d in data: prints columns
+# for d in data: # prints columns
 #     pp(data[d])
 
-# pp(data['text'][0])
+pp(data['text'])
 
 list_top3 = []
 list_top5 = []
@@ -53,42 +42,37 @@ for t in data['text']:
     key_pass = "/xml?user=ponagaibo&key=03.129922212:6edf0fa5507f344a609be991e364b7b2"
     delim = "%20"
     url = start_url + delim.join(words_of_request) + end_url + key_pass
-    # print(url)
 
     page = requests.get(url)
     page.encoding = 'utf-8'
     page_text = page.text
     soup = BeautifulSoup(page_text, features="html.parser")
     print(soup.prettify())
-    break
 
     f_pret = open('data.txt', 'w', encoding='utf-8')
     f_pret.write(soup.prettify())
     f_pret.close()
 
-    # f_links = open('links.txt', 'w', encoding='utf-8')
-    # f_test = open('test.txt', 'w', encoding='utf-8')
-
-    f_hosts = open('sport_hosts.txt', 'r', encoding='utf-8')
+    f_hosts = open('football_hosts.txt', 'r', encoding='utf-8')
     sport_hosts = f_hosts.read().split()
     f_hosts.close()
 
     list_of_links = []
     hosts_to_check = {}
-    cnt = 1
-
+    cnt = 0
     for link in soup.find_all('a', href=True):
-        # print("    link:")
-        # print(link['href'])
+        if len(link['href']) <= 1:
+            continue
         if link['href'][0:2] == "//":
             continue
+            # pass "//yandex.ru/"
+        if link['href'][0:7] == "/search":
+            continue
+        # print("\n    link:")
+        # print(link['href'])
 
         whole_url = link['href'].split("/")
         whole_url = list(filter(None, whole_url))
-
-        if len(whole_url) <= 2:
-            # print("  ~~~without dir")
-            continue
 
         # print("    parsed link (whole_url):")
         # print(whole_url)
@@ -102,36 +86,63 @@ for t in data['text']:
         if list_of_host_words[1] == "yandex" or list_of_host_words[0] == 'yandex':
             # print("  ~~~yandex")
             continue
+
         if list_of_host_words[0] == "www":
             del(list_of_host_words[0])
 
         host = ".".join(list_of_host_words)
-        directory = whole_url[2]
-        # print("      dir: " + directory)
-        host_with_dir = host + "/" + directory
-        # print("        ***hosts: " + host + "    " + host_with_dir)
+
+        host_with_dir = ""
+        if len(whole_url) >= 3:
+            directory = whole_url[2]
+            # print("      dir: " + directory)
+            host_with_dir = host + "/" + directory
+
+        host_with_two_dirs = ""
+        if len(whole_url) >= 4:
+            # print("      second dir: " + whole_url[3])
+            host_with_two_dirs = host_with_dir + "/" + whole_url[3]
+
+        # print("        ***hosts: " + host + "..." + host_with_dir + "..." + host_with_two_dirs + ".")
+
+        if (hosts_to_check.get(host_with_two_dirs) is None
+            and hosts_to_check.get(host_with_dir) is None
+            and len(whole_url) >= 3):
+            cnt += 1
+
+        if host_with_two_dirs != "":
+            # print("    cur host_with_two_dirs: " + str(host_with_two_dirs))
+            if hosts_to_check.get(host_with_two_dirs) is not None:
+                # print("host_with_two_dirs already exist")
+                continue
+            hosts_to_check[host_with_two_dirs] = cnt
+
+        if host_with_dir != "":
+            # print("    cur host_with_dir: " + str(host_with_dir))
+            if hosts_to_check.get(host_with_dir) is not None:
+                # print("host_with_dir already exist")
+                continue
+            hosts_to_check[host_with_dir] = cnt
 
         if hosts_to_check.get(host) is not None:
-            continue
-        if hosts_to_check.get(host_with_dir) is not None:
+            # print("host already exist")
             continue
         hosts_to_check[host] = cnt
-        hosts_to_check[host_with_dir] = cnt
-        cnt += 1
-        sleep(1)
 
+        if cnt >= 11:
+            break
+        time.sleep(2)
 
-    # f_links.close()
-    # f_test.close()
+    break
 
     top3 = False
     top5 = False
     top10 = False
 
     for i, j in hosts_to_check.items():
-        print(i)
+        print(str(i) + " : " + str(j))
         if i in sport_hosts:
-            # print("   " + str(i) + " in sport! place: " + str(j))
+            print("   " + str(i) + " in sport! place: " + str(j))
             if j <= 3:
                 top3 = True
             if j <= 5:

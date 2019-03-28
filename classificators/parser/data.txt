@@ -48,15 +48,15 @@
        .
       </p>
      </div>
-     <div class="form form_state_image form_error_no form_help_yes form_audio_yes i-bem" data-bem='{"form":{"captchaSound":"https://yandex.ru/captcha/voice?aHR0cHM6Ly9leHQuY2FwdGNoYS55YW5kZXgubmV0L3ZvaWNlP2tleT0wMDJPUEZPUVh4TUl2NDNqSXU1cEVLVTg0RUhRTVVWZw,,_0/1550863871/469867d8ffdb42c79071fcb679a8da1d_a68fc04932707aa4d459e192eade5561","introSound":"https://yandex.ru/captcha/voiceintro?aHR0cHM6Ly9leHQuY2FwdGNoYS55YW5kZXgubmV0L3N0YXRpYy9pbnRyby1ydS5tcDM,_0/1550863871/469867d8ffdb42c79071fcb679a8da1d_f17c5d4607429f51d94533c01e932fc1","buttonPlay":"Произнести","buttonPlaying":"Воспроизводится","messageError":"Неверно, попробуйте ещё раз.","messageHelp":"Используйте строчные и прописные буквы, знаки препинания. Между словами поставьте пробел."}}'>
+     <div class="form form_state_image form_error_no form_help_yes form_audio_yes i-bem" data-bem='{"form":{"captchaSound":"https://yandex.ru/captcha/voice?aHR0cHM6Ly9leHQuY2FwdGNoYS55YW5kZXgubmV0L3ZvaWNlP2tleT0wMDIxZ0JWNzcxM2NqU080d3AxRkRTTzJiUkFqNk80Qg,,_0/1553762183/bf095c7ae30146c499d56155d47b13dd_ad8e10774d115a1a6e40f9b61f821777","introSound":"https://yandex.ru/captcha/voiceintro?aHR0cHM6Ly9leHQuY2FwdGNoYS55YW5kZXgubmV0L3N0YXRpYy9pbnRyby1ydS5tcDM,_0/1553762183/bf095c7ae30146c499d56155d47b13dd_1668ec772ef466554cf34278dfdb0907","buttonPlay":"Произнести","buttonPlaying":"Воспроизводится","messageError":"Неверно, попробуйте ещё раз.","messageHelp":"Используйте строчные и прописные буквы, знаки препинания. Между словами поставьте пробел."}}'>
       <form action="/checkcaptcha" class="form__inner" method="get">
-       <input class="form__key" name="key" type="hidden" value="002OPFOQXxMIv43jIu5pEKU84EHQMUVg_0/1550863871/469867d8ffdb42c79071fcb679a8da1d_aa2214a9dcca7e7053d83d643c113f6c"/>
-       <input class="form__retpath" name="retpath" type="hidden" value="https://yandex.ru/search?text=%D1%84%D1%83%D1%82%D0%B1%D0%BE%D0%BB&amp;lr=213/xml?user=ponagaibo&amp;key=03.129922212:6edf0fa5507f344a609be991e364b7b2_cb1fac21c4c55b0cdab31dcc7d6494cc"/>
+       <input class="form__key" name="key" type="hidden" value="0021gBV7713cjSO4wp1FDSO2bRAj6O4B_0/1553762183/bf095c7ae30146c499d56155d47b13dd_d660c3bc4ced612c95d72d74cbaf3962"/>
+       <input class="form__retpath" name="retpath" type="hidden" value="https://yandex.ru/search?text=%D0%BB%D0%B8%D0%B3%D0%B0%20%D1%87%D0%B5%D0%BC%D0%BF%D0%B8%D0%BE%D0%BD%D0%BE%D0%B2&amp;lr=213/xml?user=ponagaibo&amp;key=03.129922212:6edf0fa5507f344a609be991e364b7b2_29dce46d91c164828b5f0e138f0f2927"/>
        <div aria-label="Изображение ↔ Звук" class="form__trigger" role="button" tabindex="0" title="Изображение ↔ Звук">
        </div>
        <span aria-label="Показать другую картинку" class="link form__refresh i-bem" data-bem='{"link":{}}' role="button" tabindex="0" title="Показать другую картинку">
        </span>
-       <img alt="" class="image form__captcha" src="https://yandex.ru/captchaimg?aHR0cHM6Ly9leHQuY2FwdGNoYS55YW5kZXgubmV0L2ltYWdlP2tleT0wMDJPUEZPUVh4TUl2NDNqSXU1cEVLVTg0RUhRTVVWZw,,_0/1550863871/469867d8ffdb42c79071fcb679a8da1d_c6d636874105e4a80f64fe7e32e182b1" style="background: #cfcfcf;"/>
+       <img alt="" class="image form__captcha" src="https://yandex.ru/captchaimg?aHR0cHM6Ly9leHQuY2FwdGNoYS55YW5kZXgubmV0L2ltYWdlP2tleT0wMDIxZ0JWNzcxM2NqU080d3AxRkRTTzJiUkFqNk80Qg,,_0/1553762183/bf095c7ae30146c499d56155d47b13dd_8ec4f9320667a672a5ac541812d825b9" style="background: #cfcfcf;"/>
        <div class="form__audio">
         <button autocomplete="off" class="button2 button2_size_m button2_theme_normal button2_action_play form__play i-bem" data-bem='{"button2":{}}' tabindex="0" type="button">
          <span class="button2__text">
