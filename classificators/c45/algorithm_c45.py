@@ -5,13 +5,27 @@ from pprint import pprint as pp
 import math
 
 
-MAX_DEPTH = 3
+MAX_DEPTH = 2
 headers = None
 
 
 class Leaf:
-    def __init__(self, examples):
-        self.predictions = count_class(examples)
+    def __init__(self, examples=None, pred1=None, pred2=None, err=None):
+        if examples is not None:
+            self.predictions = count_class(examples)
+            self.errors = 0.0
+        elif pred1 is not None and pred2 is not None:
+            print("pruned leaf")
+            d = dict(pred1)
+            for k, v in pred2.items():
+                if k not in d:
+                    d[k] = v
+                else:
+                    d[k] += v
+            self.predictions = dict(d)
+            self.errors = err
+        else:
+            print("Error!!! Wrong constructor arguments")
 
 
 class FeatureNode:
@@ -62,6 +76,13 @@ def generate_sets(data, target):
 
 def count_class(examples):
     counts = {}
+    # print("in count classes, elems:")
+    # for el in examples[0]:
+    #     print(el)
+    # print("targets:")
+    # for tar in examples[1]:
+    #     print(tar)
+
     targets = examples[1]
     for t in targets:
         if t not in counts:
@@ -194,7 +215,7 @@ def main_class(counts):
 
 def print_tree(node, delim=''):
     if isinstance(node, Leaf):
-        print(delim + "Predict", printable_leaf(node.predictions))
+        print(delim + "Predict " + str(node.predictions) + ", er: " + str(node.errors))
         return
 
     print(delim + str(node.question))
@@ -214,10 +235,77 @@ def classify(dataset, node):
         return classify(dataset, node.false_branch)
 
 
+def count_errors(dataset, target, node):
+    if isinstance(node, Leaf):
+        # print("\ncur dataset:")
+        # pp(dataset)
+        # print("cur target: ", target)
+        # print("cur leaf: ", node.predictions, sum(node.predictions.values()))
+        # print("main class: ", main_class(node.predictions))
+        if target != main_class(node.predictions):
+            node.errors += 1
+        return node.predictions
+
+    if node.question.match(dataset):
+        return count_errors(dataset, target, node.true_branch)
+    else:
+        return count_errors(dataset, target, node.false_branch)
+
 def question_number(question):
     data_feature_names = headers[:-1]
     num = np.where(data_feature_names == question)
     return num[0][0]
+
+
+def count_and_prune(tree, train_set):
+    for i in range(len(train_set[0])):
+        c = count_errors(train_set[0][i], train_set[1][i], tree)
+
+    print("\nafter count errors:")
+    print_tree(tree)
+    print("\nprunning...")
+    prune(tree)
+    print("\nafter pruning: ")
+    print_tree(tree)
+
+
+def prune(tree):
+    z_a = 1.64
+
+    if not isinstance(tree.true_branch, Leaf):
+        tree.true_branch = prune(tree.true_branch)
+    if not isinstance(tree.false_branch, Leaf):
+        tree.false_branch = prune(tree.false_branch)
+
+    if isinstance(tree.true_branch, Leaf) and isinstance(tree.false_branch, Leaf):
+        # print("cur node with q: " + str(tree.question))
+        true_size = sum(tree.true_branch.predictions.values())
+        t_leaf_er = tree.true_branch.errors / true_size
+        true_err = t_leaf_er + z_a * math.sqrt((t_leaf_er * (1 - t_leaf_er)) / true_size)
+
+        false_size = sum(tree.false_branch.predictions.values())
+        f_leaf_er = tree.false_branch.errors / false_size
+        false_err = f_leaf_er + z_a * math.sqrt((f_leaf_er * (1 - f_leaf_er)) / false_size)
+
+        # print("true leaf: {}, er: {}, s: {}, pes: {}".format(tree.true_branch.predictions, tree.true_branch.errors,
+        #                                                      true_size, true_err))
+        # print("false leaf: {}, er: {}, s: {}, pes: {}".format(tree.false_branch.predictions, tree.false_branch.errors,
+        #                                                       false_size, false_err))
+
+        total_size = true_size + false_size
+        pes_err = (true_size * true_err + false_size * false_err) / total_size
+        cur_err = (tree.true_branch.errors + tree.false_branch.errors) / total_size
+        # print("total size: {}, pes_err: {}, cur_err = {}".format(total_size, pes_err, cur_err))
+
+        leafs_err = t_leaf_er + f_leaf_er
+
+        if cur_err > pes_err:
+            print("do pruning!!")
+            return Leaf(None, tree.true_branch.predictions, tree.false_branch.predictions, leafs_err)
+        else:
+            # print("ordinary tree")
+            return tree
+    return tree
 
 
 def main():
@@ -225,17 +313,28 @@ def main():
     train_set, test_set = generate_sets(data, target)
 
     root = build_tree(train_set, 0)
-    print_tree(root)
+    # print_tree(root)
+
+    train_data = train_set[0]
+    train_target = train_set[1]
 
     test_data = test_set[0]
     test_target = test_set[1]
-    print("test set: ")
-    pp(test_set)
+    # print("test set: ")
+    # pp(test_set)
+    # print("train set: ")
+    # pp(train_set)
 
     all_classes = []
     for i in range(len(test_set[0])):
         c = classify(test_data[i], root)
         all_classes.append(c)
+
+    # for i in range(len(train_set[0])):
+    #     c = count_errors(train_data[i], train_target[i], root)
+    #
+    # print_tree(root)
+    count_and_prune(root, train_set)
 
     for i in range(len(test_set[0])):
         print("For %s real: %s. Predicted: %s"
