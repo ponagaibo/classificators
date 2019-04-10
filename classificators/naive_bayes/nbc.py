@@ -3,9 +3,11 @@ import pandas as pd
 from pprint import pprint as pp
 import random
 import copy
+import time
 
 
 headers = None
+num_of_buckets = 8
 
 
 class Bucket:
@@ -26,10 +28,15 @@ def load_tsv():
     df = pd.read_csv('little_data.tsv', delimiter='\t', encoding='utf-8')
     global headers
     headers = df.dtypes.index.values
+    print('headers:', headers)
     data_feature_names = headers[:-1]
     data = df[data_feature_names].values
+    print("data:")
+    print(data)
     target_name = headers[-1]
     target = df[target_name].values
+    print('target:')
+    print(target)
     return data, target
 
 
@@ -45,6 +52,15 @@ def generate_sets(data, target, split):
     test_data = [data[i] for i in test_ind]
     test_target = [target[i] for i in test_ind]
     test_set = [test_data, test_target]
+
+    # print("\ntrain_set:")
+    # for tr in enumerate(zip(train_set[0], train_set[1])):
+    #     print(tr)
+    # print(train_set)
+    # print("test_set:")
+    # for ts in enumerate(test_set[0]):
+    #     print(ts)
+    # print(test_set)
     return train_set, test_set
 
 
@@ -110,6 +126,43 @@ def categorize_test_set(test_set, buckets):
     return new_test_set
 
 
+def get_freqs(examples):
+    freqs = {}
+    for ex, t in zip(examples[0], examples[1]):
+        if t not in freqs:
+            freqs[t] = 1
+        freqs[t] += 1
+    return freqs
+
+
+def get_value_freqs(examples):
+    val_freqs = []
+    freqs0 = []
+    freqs1 = []
+    freqs0.append({})
+    freqs1.append({})
+    for col in range(1, len(examples[0][0])):
+        # print("col:", col)
+        column_freqs0 = {}
+        column_freqs1 = {}
+        for val in range(0, num_of_buckets):
+            column_freqs0[val] = 1
+            column_freqs1[val] = 1
+
+        for ex, t in zip(examples[0], examples[1]):
+            # print("ex, ", ex)
+            # print("ex[{}] = {}".format(col, ex[col]))
+            if t == 0:
+                column_freqs0[ex[col]] += 1
+            else:
+                column_freqs1[ex[col]] += 1
+        freqs0.append(column_freqs0)
+        freqs1.append(column_freqs1)
+    val_freqs.append(freqs0)
+    val_freqs.append(freqs1)
+    return val_freqs
+
+
 def get_elem(examples, class_name, feature_num=-1, feature_val=-1):
     cnt = 1
     if feature_num == -1 and feature_val == -1:
@@ -131,28 +184,53 @@ def get_elems_of_class(examples, class_name):
 
 
 def classify(train_set, test_set):
+    ex_cnt = 0
+    errors = 0
+    cnt0 = 0
+    cnt1 = 0
+    real0 = 0
+    real1 = 0
+
     print("classify this examples: ")
-    pp(test_set)
+    # pp(test_set)
     classes = []
-    for ex in test_set[0]:
+
+    apriori_pr = find_class_freqs(train_set)
+    train_len = len(train_set[0])
+    for cls in apriori_pr.keys():
+        apriori_pr[cls] /= train_len
+
+    # cnt_this_cl_all = []
+    # cnt_this_cl_all.append(get_elem(train_set, 0))
+    # cnt_this_cl_all.append(get_elem(train_set, 1))
+    # print(cnt_this_cl_all)
+    class_freqs = get_freqs(train_set)
+    # print("fr:", class_freqs)
+
+    val_freqs = get_value_freqs(train_set)
+
+    for ex, t in zip(test_set[0], test_set[1]):
+        # print("classify:", ex)
         max_ans = float('-inf')
         my_class = float('-inf')
-        apriori_pr = find_class_freqs(train_set)
-        train_len = len(train_set[0])
-        for cls in apriori_pr.keys():
-            apriori_pr[cls] /= train_len
-        # print(apriori_pr)
+
         for cl in {0, 1}:
             sum = 0
             # pp(train_set)
+            # cnt_this_cl = get_elem(train_set, cl)
+            cnt_this_cl = class_freqs[cl]
+            # print("in class " + str(cl) + " " + str(cnt_this_cl) + " elems")
+
             for col in range(1, len(test_set[0][0])):
                 cur_val = ex[col]
-                cnt_this_val_cl = get_elem(train_set, cl, col, cur_val)
+                # cnt_this_val_cl = get_elem(train_set, cl, col, cur_val)
                 # print("col: " + str(col) + ", val: " + str(cur_val) + ", class: " + str(cl))
                 # print(cnt_this_val_cl)
-                cnt_this_cl = get_elem(train_set, cl)
-                # print("in class " + str(cl) + " " + str(cnt_this_cl) + " elems")
-                this_pr = cnt_this_val_cl / cnt_this_cl
+                # print(" ", val_freqs[cl][col][cur_val])
+
+                this_pr = val_freqs[cl][col][cur_val] / cnt_this_cl
+
+                # this_pr = cnt_this_val_cl / cnt_this_cl
                 # print("this prob: " + str(this_pr) + ", log2: " + str(log2(this_pr)))
                 sum += log2(this_pr)
             sum += log2(apriori_pr[cl])
@@ -161,31 +239,119 @@ def classify(train_set, test_set):
                 max_ans = sum
                 my_class = cl
         classes.append(my_class)
-        # print("for " + ex[0] + " class is " + str(my_class))
-    for ex, cl, t in zip(test_set[0], classes, test_set[1]):
-        print("for " + ex[0] + " predict: " + str(cl) + ", real: " + str(t))
+        # print("for " + str(ex[0]) + " class is " + str(my_class) + ", real: " + str(t))
+        if my_class != t:
+            errors += 1
 
+        if my_class == 0:
+            cnt0 += 1
+        else:
+            cnt1 += 1
+
+        if t == 0:
+            real0 += 1
+        else:
+            real1 += 1
+
+        ex_cnt += 1
+        if ex_cnt % 100 == 0:
+            print("cnt:", ex_cnt)
+    print("errors: {} / {} => {}%, 0: {} vs {}, 1: {} vs {}".format(errors, len(classes), errors / len(classes) * 100, cnt0, real0, cnt1, real1))
+
+    # for ex, cl, t in zip(test_set[0], classes, test_set[1]):
+    #     # print("for " + ex[0] + " predict: " + str(cl) + ", real: " + str(t))
+    #     if cl != t:
+    #         errors += 1
+    #     if cl == 0:
+    #         cnt0 += 1
+    #     else:
+    #         cnt1 += 1
+    #
+    #     if t == 0:
+    #         real0 += 1
+    #     else:
+    #         real1 += 1
+    # print("errors: {} / {} => {}%, 0: {} vs {}, 1: {} vs {}".format(errors, len(classes), errors / len(classes) * 100, cnt0, real0, cnt1, real1))
+
+
+def load_pool():
+    df = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом\pool_tv_20190406', delimiter='\t', encoding='utf-8',
+                     names=['factors', 'reqid', 'query', 'clicked'])
+    cnt = 0
+    data = []
+    target = []
+    cnt0 = 0
+    cnt1 = 0
+    half_size = 1900
+    for ex in df.values:
+        # print(ex)
+        facts = list(str(ex[0])[8:].split())
+        reqid = str(ex[1])[6:]
+        query = str(ex[2])[6:]
+        clicked = str(ex[3])[8:]
+        cur_list = [query]
+        cur_list += list(map(float, facts[:]))
+        if cnt0 == half_size and cnt1 < half_size and clicked == 'false':
+            continue
+        if cnt1 == half_size and cnt0 < half_size and clicked == 'true':
+            continue
+        data.append(cur_list)
+        if clicked == 'false':
+            target.append(0)
+            cnt0 += 1
+        else:
+            target.append(1)
+            cnt1 += 1
+        cnt += 1
+        if cnt % 100 == 0:
+            print("total: {}, 0: {}, 1: {}".format(cnt, cnt0, cnt1))
+
+        if cnt0 >= half_size and cnt1 >= half_size:
+            print("data is loaded")
+            break
+
+    # print("data:")
+    # for d in enumerate(data):
+    #     print(d)
+
+    # print(data)
+    # print('target:')
+    # print(target)
+    return data, target
 
 
 def main():
-    data, target = load_tsv()
-    split_ratio = 0.7
+    data, target = load_pool()
+    # print("data:")
+    # print(data)
+    # print('target:')
+    # print(target)
+    split_ratio = 0.75
     training_set, test_set = generate_sets(data, target, split_ratio)
     probs = find_class_freqs(training_set)
-    print(probs)
-    num_of_buckets = 4
+    # print(probs)
     modified_train_set, buckets = categorize_train_set(training_set, num_of_buckets)
+    # print("modified")
+    # for i, j, c in zip(training_set[0], modified_train_set[0], training_set[1]):
+    #     print(i, c)
+    #     print(j, c)
+    #     print()
 
     modified_test_set = categorize_test_set(test_set, buckets)
-    for i, j in zip(test_set[0], modified_test_set[0]):
-        print(i)
-        print(j)
-        print()
-    for b in buckets:
-        print(b)
-    print()
-    print()
+    print("modified")
+    # for i, j in zip(test_set[0], modified_test_set[0]):
+    #     print(i)
+    #     print(j)
+    #     print()
+
+    # for b in buckets:
+    #     print(b)
+    # print()
+    # print()
+    start = time.time()
     classify(modified_train_set, modified_test_set)
+    end = time.time()
+    print("time =", end - start)
 
 
 main()
