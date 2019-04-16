@@ -7,7 +7,7 @@ import time
 
 
 headers = None
-num_of_buckets = 8
+num_of_buckets = 80
 
 
 class Bucket:
@@ -76,12 +76,12 @@ def find_class_freqs(training_set):
 
 def create_buckets(values, num_of_buckets):
     feature_buckets = []
-    whole_size = len(values)
+    whole_size = len(values) # amount of examples
     skip = 0
-    last_start = float('-inf')
+    last_start = float('-inf') # first min boundary
     denom = num_of_buckets
     for i in range(num_of_buckets):
-        cur_amount = ceil(whole_size / denom)
+        cur_amount = ceil(whole_size / denom) # average amount of examples in bucket
         start = last_start
         end = values[skip + cur_amount - 1]
         if i == num_of_buckets - 1:
@@ -97,11 +97,15 @@ def create_buckets(values, num_of_buckets):
 
 
 def categorize_train_set(examples, num_of_buckets):
+    print("catecorizing...")
     new_set = copy.deepcopy(examples)
     list_of_buckets = []
-
+    print("len: " + str(len(new_set[0][0]))) # feature num
+    print("new_set[0]:")
+    pp(new_set[0])
     for col in range(1, len(new_set[0][0])):
-        values = sorted({val[col] for val in new_set[0]})
+        values = sorted({val[col] for val in new_set[0]}) # iterating through examples
+        print("values:", values)
         feature_buckets = create_buckets(values, num_of_buckets)
         list_of_buckets.append(feature_buckets)
 
@@ -115,15 +119,81 @@ def categorize_train_set(examples, num_of_buckets):
 
 
 def categorize_test_set(test_set, buckets):
+    print("categorize test set")
+    pp(test_set)
     new_test_set = copy.deepcopy(test_set)
     for col in range(1, len(buckets) + 1):
         for i in range(len(new_test_set[0])):
             val = new_test_set[0][i][col]
+            print("col: {}, i: {}, val: {}".format(col, i, val))
             for j in buckets[col - 1]:
                 if j.start < val <= j.end:
                     new_test_set[0][i][col] = j.label
+                    print("set bucket:", j.label)
                     break
+    print("new test set:")
+    pp(new_test_set)
     return new_test_set
+
+
+def categorize_train_set1(examples, num_of_buckets):
+    print("categorizing train set...")
+    list_of_buckets = []
+    # print("len of ex", len(examples[0][0]))
+    for col in range(1, len(examples[0][0])):
+        values = sorted({val[col] for val in examples[0]})
+        # print("value len: {}, col: {}".format(len(values), col))
+        # print(values)
+        min_val = min(values)
+        # print("min:", min_val)
+        max_val = max(values)
+        # print("max:", max_val)
+        len_of_interval = (max_val - min_val) / (num_of_buckets - 2)
+        # print("len of interval:", len_of_interval)
+        cur_col_buckets = []
+        last_start = float('-inf')  # first min boundary
+        for i in range(num_of_buckets - 1):
+            start = last_start
+            end = min_val + len_of_interval * i
+            this_bucket = Bucket(start, end, i)
+            cur_col_buckets.append(this_bucket)
+            # print("#{}: ({} : {}]".format(i, start, end))
+            last_start = end
+        this_bucket = Bucket(last_start, float('+inf'), num_of_buckets - 1)
+        cur_col_buckets.append(this_bucket)
+        # print("#{}: ({} : {}]".format(num_of_buckets - 1, last_start, float('+inf')))
+        list_of_buckets.append(cur_col_buckets)
+
+        for i in range(len(examples[0])):
+            # print("cur val:", examples[0][i][col])
+            if len_of_interval == 0:
+                bucket_num = 0
+            else:
+                bucket_num = ceil((examples[0][i][col] - min_val) / len_of_interval)
+            # print("bucket number:", bucket_num)
+            examples[0][i][col] = bucket_num
+    # print("modified ex[0]:")
+    # pp(examples[0])
+    return examples, list_of_buckets
+
+
+def categorize_test_set1(test_set, buckets):
+    print("categorizing test set...")
+
+    # print("len of test set:", len(test_set[0][0]))
+    # pp(test_set)
+    for col in range(1, len(test_set[0][0])):
+        for i in range(len(test_set[0])):
+            # print("i = {} / {}, col = {} / {}".format(i, len(test_set[0]), col, len(test_set[0][0])))
+            for b in buckets[col - 1]:
+                if b.start < test_set[0][i][col] <= b.end:
+                    test_set[0][i][col] = b.label
+                    # print("set bucket:", b.label)
+                    break
+            # print("bucket number:", bucket_num)
+    # print("new test set:")
+    # pp(test_set)
+    return test_set
 
 
 def get_freqs(examples):
@@ -288,13 +358,20 @@ def load_pool():
         facts = list(str(ex[0])[8:].split())
         reqid = str(ex[1])[6:]
         query = str(ex[2])[6:]
+        if query == "":
+            continue
+
+        if len(facts) != 1097:
+            continue
+
         clicked = str(ex[3])[8:]
+
         cur_list = [query]
         cur_list += list(map(float, facts[:]))
-        if cnt0 == half_size and cnt1 < half_size and clicked == 'false':
-            continue
-        if cnt1 == half_size and cnt0 < half_size and clicked == 'true':
-            continue
+        # if cnt0 == half_size and cnt1 < half_size and clicked == 'false':
+        #     continue
+        # if cnt1 == half_size and cnt0 < half_size and clicked == 'true':
+        #     continue
         data.append(cur_list)
         if clicked == 'false':
             target.append(0)
@@ -303,12 +380,12 @@ def load_pool():
             target.append(1)
             cnt1 += 1
         cnt += 1
-        if cnt % 100 == 0:
+        if cnt % 1000 == 0:
             print("total: {}, 0: {}, 1: {}".format(cnt, cnt0, cnt1))
 
-        if cnt0 >= half_size and cnt1 >= half_size:
-            print("data is loaded")
-            break
+        # if cnt0 >= half_size and cnt1 >= half_size:
+        #     print("data is loaded")
+        #     break
 
     # print("data:")
     # for d in enumerate(data):
@@ -317,6 +394,8 @@ def load_pool():
     # print(data)
     # print('target:')
     # print(target)
+    print("data is loaded")
+
     return data, target
 
 
@@ -328,16 +407,16 @@ def main():
     # print(target)
     split_ratio = 0.75
     training_set, test_set = generate_sets(data, target, split_ratio)
-    probs = find_class_freqs(training_set)
-    # print(probs)
-    modified_train_set, buckets = categorize_train_set(training_set, num_of_buckets)
+    modified_train_set, buckets = categorize_train_set1(training_set, num_of_buckets)
+
     # print("modified")
     # for i, j, c in zip(training_set[0], modified_train_set[0], training_set[1]):
     #     print(i, c)
     #     print(j, c)
     #     print()
 
-    modified_test_set = categorize_test_set(test_set, buckets)
+    modified_test_set = categorize_test_set1(test_set, buckets)
+
     print("modified")
     # for i, j in zip(test_set[0], modified_test_set[0]):
     #     print(i)
