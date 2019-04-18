@@ -2,12 +2,12 @@ import pandas as pd
 import numpy as np
 import random
 from pprint import pprint as pp
-import math
+from math import ceil, log2, sqrt
 
 
-MAX_DEPTH = 3
-headers = None
-
+MAX_DEPTH = 5
+NUM_OF_BUCKETS = 32
+NUM_OF_TREES = 10
 
 class Leaf:
     def __init__(self, examples):
@@ -31,12 +31,73 @@ class Question:
         return val >= self.value
 
     def __repr__(self):
-        return "Q: Is %s >= %s?" % (headers[self.column], str(self.value))
+        return "Q: Is #%d >= %s?" % (self.column, str(self.value))
+
+
+class Bucket:
+    def __init__(self, start, end, label):
+        self.start = start
+        self.end = end
+        self.label = label
+        self.cnt = 0
+
+    def add_to_cnt(self, num=1):
+        self.cnt += num
+
+    def __repr__(self):
+        return "'%s': (%s : %s], %s pcs" % (str(self.label), str(self.start), str(self.end), str(self.cnt))
+
+
+def load_pool():
+    df = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом\pool_tv_20190406', delimiter='\t', encoding='utf-8',
+                     names=['factors', 'reqid', 'query', 'clicked'])
+    cnt = 0
+    data = []
+    target = []
+    cnt0 = 0
+    cnt1 = 0
+    half_size = 1900
+    for ex in df.values:
+        facts = list(str(ex[0])[8:].split())
+        query = str(ex[2])[6:]
+        if query == "":
+            continue
+
+        if len(facts) != 1097:
+            continue
+
+        clicked = str(ex[3])[8:]
+
+        cur_list = [query]
+        cur_list += list(map(float, facts[:]))
+
+        if cnt0 == half_size and cnt1 < half_size and clicked == 'false':
+            continue
+        if cnt1 == half_size and cnt0 < half_size and clicked == 'true':
+            continue
+
+        data.append(cur_list)
+        if clicked == 'false':
+            target.append(0)
+            cnt0 += 1
+        else:
+            target.append(1)
+            cnt1 += 1
+        cnt += 1
+        if cnt % 1000 == 0:
+            print("total: {}, 0: {}, 1: {}".format(cnt, cnt0, cnt1))
+
+        # if cnt >= 500:
+        #     break
+
+        if cnt0 >= half_size and cnt1 >= half_size:
+            break
+    print("data is loaded")
+    return data, target
 
 
 def load_tsv():
     df = pd.read_csv('little_data.tsv', delimiter='\t', encoding='utf-8')
-    global headers
     headers = df.dtypes.index.values
     data_feature_names = headers[:-1]
     data = df[data_feature_names].values
@@ -45,8 +106,8 @@ def load_tsv():
     return data, target
 
 
-def generate_sets(data, target):
-    train_size = int(len(data) * 0.7)
+def generate_sets(data, target, split_coef):
+    train_size = int(len(data) * split_coef)
     train_ind = sorted(random.sample(range(len(data)), train_size))
     test_ind = [i for i in range(len(data)) if i not in train_ind]
 
@@ -104,7 +165,7 @@ def entropy(examples):
     p_in = in_class / whole_size
     p_not_in = not_in_class / whole_size
 
-    ent = -p_in * math.log2(p_in) - p_not_in * math.log2(p_not_in)
+    ent = -p_in * log2(p_in) - p_not_in * log2(p_not_in)
     return ent
 
 
@@ -125,7 +186,7 @@ def split_info(true_branch, false_branch):
     len_t = float(len(true_branch[0]))
     len_f = float(len(false_branch[0]))
     len_whole = float(len_t + len_f)
-    sum_info = len_t / len_whole * math.log2(len_t / len_whole) + len_f / len_whole * math.log2(len_f / len_whole)
+    sum_info = len_t / len_whole * log2(len_t / len_whole) + len_f / len_whole * log2(len_f / len_whole)
     return -sum_info
 
 
@@ -136,15 +197,15 @@ def gain_ratio(true_branch, false_branch, whole_entropy):
 
 
 def best_question(examples, rf=False):
-    data_feature_names = headers[1:-1]
-    n_features = len(data_feature_names)
+    n_features = len(examples[0][0]) - 1
+    feature_amount = sqrt(n_features)
 
     best_gain_ratio = 0
     best_q = None
     cur_entropy = entropy(examples)  # ???
 
     if rf:
-        subfeatures_len = round(math.sqrt(n_features))
+        subfeatures_len = round(feature_amount)
         cur_features_num = sorted(random.sample([i for i in range(1, n_features + 1)], subfeatures_len))
     else:
         cur_features_num = [i for i in range(1, n_features + 1)]
@@ -174,6 +235,46 @@ def build_tree(examples, cur_depth, rf=False):
     true_branch = build_tree(true_branch, cur_depth + 1, rf)
     false_branch = build_tree(false_branch, cur_depth + 1, rf)
     return FeatureNode(question, true_branch, false_branch)
+
+
+def categorize_train_set1(examples):
+    print("categorizing train set...")
+    list_of_buckets = []
+    for col in range(1, len(examples[0][0])):
+        values = sorted({val[col] for val in examples[0]})
+        min_val = min(values)
+        max_val = max(values)
+        len_of_interval = (max_val - min_val) / (NUM_OF_BUCKETS - 2)
+        cur_col_buckets = []
+        last_start = float('-inf')  # first min boundary
+        for i in range(NUM_OF_BUCKETS - 1):
+            start = last_start
+            end = min_val + len_of_interval * i
+            this_bucket = Bucket(start, end, i)
+            cur_col_buckets.append(this_bucket)
+            last_start = end
+        this_bucket = Bucket(last_start, float('+inf'), NUM_OF_BUCKETS - 1)
+        cur_col_buckets.append(this_bucket)
+        list_of_buckets.append(cur_col_buckets)
+
+        for i in range(len(examples[0])):
+            if len_of_interval == 0:
+                bucket_num = 0
+            else:
+                bucket_num = ceil((examples[0][i][col] - min_val) / len_of_interval)
+            examples[0][i][col] = bucket_num
+    return examples, list_of_buckets
+
+
+def categorize_test_set1(test_set, buckets):
+    print("categorizing test set...")
+    for col in range(1, len(test_set[0][0])):
+        for i in range(len(test_set[0])):
+            for b in buckets[col - 1]:
+                if b.start < test_set[0][i][col] <= b.end:
+                    test_set[0][i][col] = b.label
+                    break
+    return test_set
 
 
 def printable_leaf(counts):
@@ -218,52 +319,44 @@ def classify(dataset, node):
         return classify(dataset, node.false_branch)
 
 
-def question_number(question):
-    data_feature_names = headers[:-1]
-    num = np.where(data_feature_names == question)
-    return num[0][0]
-
-
 def main():
     # for every tree choose subset and build three
     # when trees are built, use test set to everyone and collect answers
     # most popular answer is a global answer
-    num_of_trees = 8
 
-    data, target = load_tsv()
-    train_set, test_set = generate_sets(data, target)
+    data, target = load_pool()
+    split_ratio = 0.8
+    train_set, test_set = generate_sets(data, target, split_ratio)
+
+    print("modifying...")
+    modified_train_set, buckets = categorize_train_set1(train_set)
+    modified_test_set = categorize_test_set1(test_set, buckets)
 
     list_of_trees = []
-
-    for _ in range(num_of_trees):
+    for i in range(NUM_OF_TREES):
         build_rf = True
         sub_data = []
         sub_target = []
-        for _ in train_set[0]:
-            k = random.randrange(0, len(train_set[0]))
-            sub_data.append(train_set[0][k])
-            sub_target.append(train_set[1][k])
+        for _ in modified_train_set[0]:
+            k = random.randrange(0, len(modified_train_set[0]))
+            sub_data.append(modified_train_set[0][k])
+            sub_target.append(modified_train_set[1][k])
         sub_train_set = [sub_data, sub_target]
 
+        print("build tree {}/{}...".format(i, NUM_OF_TREES))
         root = build_tree(sub_train_set, 0, build_rf)
-        print_tree(root)
-        print()
         list_of_trees.append(root)
 
-    test_data = test_set[0]
-    test_target = test_set[1]
-    print("test set: ")
-    pp(test_set)
+    test_data = modified_test_set[0]
+    test_target = modified_test_set[1]
 
+    print("classifying...")
     all_classes = []
-    for i in range(len(test_set[0])):
+    for i in range(len(modified_test_set[0])):
         total_classes = {}
         tree_cnt = 1
         for tree in list_of_trees:
             c = classify(test_data[i], tree)
-            # print("tree #" + str(tree_cnt))
-            # print(str(c) + " => ", end="")
-            # print(printable_leaf(c))
             for kk, vv in c.items():
                 if kk not in total_classes:
                     total_classes[kk] = 0
@@ -271,12 +364,30 @@ def main():
             tree_cnt += 1
         all_classes.append(total_classes)
 
-        # print("For %s real: %s. Predicted: %s"
-        #       % (test_data[i][0], test_target[i], main_class(total_classes)))
+    errors = 0
+    tp = 1
+    fn = 1
+    fp = 1
+    for i in range(len(modified_test_set[0])):
+        my_class = main_class(all_classes[i])
+        if my_class != test_target[i]:
+            errors += 1
 
-    print()
-    for i in range(len(test_set[0])):
-        print("For %s real: %s. Predicted: %s"
-              % (test_data[i][0], test_target[i], main_class(all_classes[i])))
+        if my_class == 1 and test_target[i] == 1:
+            tp += 1
+
+        if my_class == 0 and test_target[i] == 1:
+            fn += 1
+
+        if my_class == 1 and test_target[i] == 0:
+            fp += 1
+
+    print("tp: {}, fn: {}, fp: {}".format(tp, fn, fp))
+    recall = tp / (tp + fn)
+    precision = tp / (tp + fp)
+    f1_measure = 2 * recall * precision / (recall + precision)
+    print("errors: {} / {} => {}%,  F1: {},  R: {}, P: {}".
+          format(errors, len(test_target), errors / len(test_target) * 100, f1_measure, recall, precision))
+
 
 main()

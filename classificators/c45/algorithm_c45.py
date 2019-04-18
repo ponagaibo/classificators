@@ -1,12 +1,13 @@
 import pandas as pd
+from math import ceil
 import numpy as np
 import random
 from pprint import pprint as pp
 import math
 
 
-MAX_DEPTH = 2
-headers = None
+MAX_DEPTH = 500
+NUM_OF_BUCKETS = 50
 
 
 class Leaf:
@@ -15,7 +16,7 @@ class Leaf:
             self.predictions = count_class(examples)
             self.errors = 0.0
         elif pred1 is not None and pred2 is not None:
-            print("pruned leaf")
+            # print("pruned leaf")
             d = dict(pred1)
             for k, v in pred2.items():
                 if k not in d:
@@ -45,22 +46,85 @@ class Question:
         return val >= self.value
 
     def __repr__(self):
-        return "Q: Is %s >= %s?" % (headers[self.column], str(self.value))
+        return "Q: Is #%d >= %s?" % (self.column, str(self.value))
+
+
+class Bucket:
+    def __init__(self, start, end, label):
+        self.start = start
+        self.end = end
+        self.label = label
+        self.cnt = 0
+
+    def add_to_cnt(self, num=1):
+        self.cnt += num
+
+    def __repr__(self):
+        return "'%s': (%s : %s], %s pcs" % (str(self.label), str(self.start), str(self.end), str(self.cnt))
+
+
+def load_pool():
+    df = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом\pool_tv_20190406', delimiter='\t', encoding='utf-8',
+                     names=['factors', 'reqid', 'query', 'clicked'])
+    cnt = 0
+    data = []
+    target = []
+    cnt0 = 0
+    cnt1 = 0
+    half_size = 1900
+    for ex in df.values:
+        facts = list(str(ex[0])[8:].split())
+        query = str(ex[2])[6:]
+        if query == "":
+            continue
+
+        if len(facts) != 1097:
+            continue
+
+        clicked = str(ex[3])[8:]
+
+        cur_list = [query]
+        cur_list += list(map(float, facts[:]))
+
+        if cnt0 == half_size and cnt1 < half_size and clicked == 'false':
+            continue
+        if cnt1 == half_size and cnt0 < half_size and clicked == 'true':
+            continue
+
+        data.append(cur_list)
+        if clicked == 'false':
+            target.append(0)
+            cnt0 += 1
+        else:
+            target.append(1)
+            cnt1 += 1
+        cnt += 1
+        if cnt % 1000 == 0:
+            print("total: {}, 0: {}, 1: {}".format(cnt, cnt0, cnt1))
+
+        # if cnt >= 500:
+        #     break
+
+        if cnt0 >= half_size and cnt1 >= half_size:
+            break
+    print("data is loaded")
+    return data, target
 
 
 def load_tsv():
     df = pd.read_csv('little_data.tsv', delimiter='\t', encoding='utf-8')
-    global headers
     headers = df.dtypes.index.values
     data_feature_names = headers[:-1]
     data = df[data_feature_names].values
     target_name = headers[-1]
     target = df[target_name].values
+    print("headers:")
+    print(headers)
     return data, target
 
 
-def generate_sets(data, target):
-    train_size = int(len(data) * 0.7)
+def generate_sets(data, target, split_coef):
+    train_size = int(len(data) * split_coef)
     train_ind = sorted(random.sample(range(len(data)), train_size))
     test_ind = [i for i in range(len(data)) if i not in train_ind]
 
@@ -74,15 +138,48 @@ def generate_sets(data, target):
     return train_set, test_set
 
 
+def categorize_train_set1(examples):
+    print("categorizing train set...")
+    list_of_buckets = []
+    for col in range(1, len(examples[0][0])):
+        values = sorted({val[col] for val in examples[0]})
+        min_val = min(values)
+        max_val = max(values)
+        len_of_interval = (max_val - min_val) / (NUM_OF_BUCKETS - 2)
+        cur_col_buckets = []
+        last_start = float('-inf')  # first min boundary
+        for i in range(NUM_OF_BUCKETS - 1):
+            start = last_start
+            end = min_val + len_of_interval * i
+            this_bucket = Bucket(start, end, i)
+            cur_col_buckets.append(this_bucket)
+            last_start = end
+        this_bucket = Bucket(last_start, float('+inf'), NUM_OF_BUCKETS - 1)
+        cur_col_buckets.append(this_bucket)
+        list_of_buckets.append(cur_col_buckets)
+
+        for i in range(len(examples[0])):
+            if len_of_interval == 0:
+                bucket_num = 0
+            else:
+                bucket_num = ceil((examples[0][i][col] - min_val) / len_of_interval)
+            examples[0][i][col] = bucket_num
+    return examples, list_of_buckets
+
+
+def categorize_test_set1(test_set, buckets):
+    print("categorizing test set...")
+    for col in range(1, len(test_set[0][0])):
+        for i in range(len(test_set[0])):
+            for b in buckets[col - 1]:
+                if b.start < test_set[0][i][col] <= b.end:
+                    test_set[0][i][col] = b.label
+                    break
+    return test_set
+
+
 def count_class(examples):
     counts = {}
-    # print("in count classes, elems:")
-    # for el in examples[0]:
-    #     print(el)
-    # print("targets:")
-    # for tar in examples[1]:
-    #     print(tar)
-
     targets = examples[1]
     for t in targets:
         if t not in counts:
@@ -157,8 +254,7 @@ def gain_ratio(true_branch, false_branch, whole_entropy):
 
 
 def best_question(examples):
-    data_feature_names = headers[1:-1]
-    n_features = len(data_feature_names)
+    n_features = len(examples[0][0]) - 1
 
     best_gain_ratio = 0
     best_q = None
@@ -181,7 +277,7 @@ def best_question(examples):
 
 def build_tree(examples, cur_depth):
     if cur_depth == MAX_DEPTH:
-        print("max depth reached!")
+        print("Max depth is reached!")
         return Leaf(examples)
     gain, question = best_question(examples)
     if gain == 0:
@@ -196,21 +292,20 @@ def build_tree(examples, cur_depth):
 def printable_leaf(counts):
     total = sum(counts.values()) * 1.0
     probs = {}
-    # for kk, vv in counts.items():
-    #     print(str(kk) + " : " + str(vv))
+
     for lbl in counts.keys():
         probs[lbl] = str(round(counts[lbl] / total * 100)) + "%"
     return probs
 
 
 def main_class(counts):
-    maxVal = -1
-    mainClass = -1
+    max_val = -1
+    main_cl = -1
     for k, v in counts.items():
-        if v > maxVal:
-            maxVal = v
-            mainClass = k
-    return mainClass
+        if v > max_val:
+            max_val = v
+            main_cl = k
+    return main_cl
 
 
 def print_tree(node, delim=''):
@@ -237,11 +332,6 @@ def classify(dataset, node):
 
 def count_errors(dataset, target, node):
     if isinstance(node, Leaf):
-        # print("\ncur dataset:")
-        # pp(dataset)
-        # print("cur target: ", target)
-        # print("cur leaf: ", node.predictions, sum(node.predictions.values()))
-        # print("main class: ", main_class(node.predictions))
         if target != main_class(node.predictions):
             node.errors += 1
         return node.predictions
@@ -251,22 +341,11 @@ def count_errors(dataset, target, node):
     else:
         return count_errors(dataset, target, node.false_branch)
 
-def question_number(question):
-    data_feature_names = headers[:-1]
-    num = np.where(data_feature_names == question)
-    return num[0][0]
-
 
 def count_and_prune(tree, train_set):
     for i in range(len(train_set[0])):
-        c = count_errors(train_set[0][i], train_set[1][i], tree)
-
-    print("\nafter count errors:")
-    print_tree(tree)
-    print("\nprunning...")
+        count_errors(train_set[0][i], train_set[1][i], tree)
     prune(tree)
-    print("\nafter pruning: ")
-    print_tree(tree)
 
 
 def prune(tree):
@@ -278,7 +357,6 @@ def prune(tree):
         tree.false_branch = prune(tree.false_branch)
 
     if isinstance(tree.true_branch, Leaf) and isinstance(tree.false_branch, Leaf):
-        # print("cur node with q: " + str(tree.question))
         true_size = sum(tree.true_branch.predictions.values())
         t_leaf_er = tree.true_branch.errors / true_size
         true_err = t_leaf_er + z_a * math.sqrt((t_leaf_er * (1 - t_leaf_er)) / true_size)
@@ -287,57 +365,73 @@ def prune(tree):
         f_leaf_er = tree.false_branch.errors / false_size
         false_err = f_leaf_er + z_a * math.sqrt((f_leaf_er * (1 - f_leaf_er)) / false_size)
 
-        # print("true leaf: {}, er: {}, s: {}, pes: {}".format(tree.true_branch.predictions, tree.true_branch.errors,
-        #                                                      true_size, true_err))
-        # print("false leaf: {}, er: {}, s: {}, pes: {}".format(tree.false_branch.predictions, tree.false_branch.errors,
-        #                                                       false_size, false_err))
-
         total_size = true_size + false_size
         pes_err = (true_size * true_err + false_size * false_err) / total_size
         cur_err = (tree.true_branch.errors + tree.false_branch.errors) / total_size
-        # print("total size: {}, pes_err: {}, cur_err = {}".format(total_size, pes_err, cur_err))
 
         leafs_err = t_leaf_er + f_leaf_er
 
         if cur_err > pes_err:
-            print("do pruning!!")
+            print("Do pruning!")
             return Leaf(None, tree.true_branch.predictions, tree.false_branch.predictions, leafs_err)
         else:
-            # print("ordinary tree")
             return tree
     return tree
 
 
 def main():
-    data, target = load_tsv()
-    train_set, test_set = generate_sets(data, target)
+    data, target = load_pool()
+    split_ratio = 0.8
+    train_set, test_set = generate_sets(data, target, split_ratio)
 
-    root = build_tree(train_set, 0)
-    # print_tree(root)
+    print("modifying...")
+    modified_train_set, buckets = categorize_train_set1(train_set)
+    modified_test_set = categorize_test_set1(test_set, buckets)
 
-    train_data = train_set[0]
-    train_target = train_set[1]
+    print("building tree...")
+    root = build_tree(modified_train_set, 0)
 
-    test_data = test_set[0]
-    test_target = test_set[1]
-    # print("test set: ")
-    # pp(test_set)
-    # print("train set: ")
-    # pp(train_set)
+    train_data = modified_train_set[0]
+    train_target = modified_train_set[1]
+
+    test_data = modified_test_set[0]
+    test_target = modified_test_set[1]
+
+    for i in range(len(modified_test_set[0])):
+        count_errors(train_data[i], train_target[i], root)
+
+    print("pruning...")
+    count_and_prune(root, modified_train_set)
 
     all_classes = []
-    for i in range(len(test_set[0])):
+    print("classifying...")
+    for i in range(len(modified_test_set[0])):
         c = classify(test_data[i], root)
         all_classes.append(c)
 
-    # for i in range(len(train_set[0])):
-    #     c = count_errors(train_data[i], train_target[i], root)
-    #
-    # print_tree(root)
-    count_and_prune(root, train_set)
+    errors = 0
+    tp = 1
+    fn = 1
+    fp = 1
+    for i in range(len(modified_test_set[0])):
+        my_class = main_class(all_classes[i])
+        if my_class != test_target[i]:
+            errors += 1
 
-    for i in range(len(test_set[0])):
-        print("For %s real: %s. Predicted: %s"
-              % (test_data[i][0], test_target[i], main_class(all_classes[i])))
+        if my_class == 1 and test_target[i] == 1:
+            tp += 1
+
+        if my_class == 0 and test_target[i] == 1:
+            fn += 1
+
+        if my_class == 1 and test_target[i] == 0:
+            fp += 1
+    print("tp: {}, fn: {}, fp: {}".format(tp, fn, fp))
+    recall = tp / (tp + fn)
+    precision = tp / (tp + fp)
+    f1_measure = 2 * recall * precision / (recall + precision)
+    print("errors: {} / {} => {}%,  F1: {},  R: {}, P: {}".
+          format(errors, len(test_target), errors / len(test_target) * 100, f1_measure, recall, precision))
+
 
 main()
