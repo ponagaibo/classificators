@@ -3,11 +3,12 @@ import numpy as np
 import random
 from pprint import pprint as pp
 from math import ceil, log2, sqrt
+from loader import load_tsv
 
 
-MAX_DEPTH = 5
+MAX_DEPTH = 10
 NUM_OF_BUCKETS = 32
-NUM_OF_TREES = 10
+NUM_OF_TREES = 50
 
 class Leaf:
     def __init__(self, examples):
@@ -48,71 +49,36 @@ class Bucket:
         return "'%s': (%s : %s], %s pcs" % (str(self.label), str(self.start), str(self.end), str(self.cnt))
 
 
-def load_pool():
-    df = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом\pool_tv_20190406', delimiter='\t', encoding='utf-8',
-                     names=['factors', 'reqid', 'query', 'clicked'])
-    cnt = 0
-    data = []
-    target = []
-    cnt0 = 0
-    cnt1 = 0
-    half_size = 1900
-    for ex in df.values:
-        facts = list(str(ex[0])[8:].split())
-        query = str(ex[2])[6:]
-        if query == "":
-            continue
-
-        if len(facts) != 1097:
-            continue
-
-        clicked = str(ex[3])[8:]
-
-        cur_list = [query]
-        cur_list += list(map(float, facts[:]))
-
-        if cnt0 == half_size and cnt1 < half_size and clicked == 'false':
-            continue
-        if cnt1 == half_size and cnt0 < half_size and clicked == 'true':
-            continue
-
-        data.append(cur_list)
-        if clicked == 'false':
-            target.append(0)
-            cnt0 += 1
-        else:
-            target.append(1)
-            cnt1 += 1
-        cnt += 1
-        if cnt % 1000 == 0:
-            print("total: {}, 0: {}, 1: {}".format(cnt, cnt0, cnt1))
-
-        # if cnt >= 500:
-        #     break
-
-        if cnt0 >= half_size and cnt1 >= half_size:
-            break
-    print("data is loaded")
-    return data, target
-
-
-def load_tsv():
-    df = pd.read_csv('little_data.tsv', delimiter='\t', encoding='utf-8')
-    headers = df.dtypes.index.values
-    data_feature_names = headers[:-1]
-    data = df[data_feature_names].values
-    target_name = headers[-1]
-    target = df[target_name].values
-    return data, target
-
-
-def generate_sets(data, target, split_coef):
+def generate_sets(data, target, split_coef, uniform=False):
     train_size = int(len(data) * split_coef)
     train_ind = sorted(random.sample(range(len(data)), train_size))
     test_ind = [i for i in range(len(data)) if i not in train_ind]
 
+    cnt0 = 0
+    cnt1 = 0
     train_data = [data[i] for i in train_ind]
-    train_target = [target[i] for i in train_ind]
+    train_target = []
+    # train_target = [target[i] for i in train_ind]
+    for i in train_ind:
+        train_target.append(target[i])
+        if target[i] == 0:
+            cnt0 += 1
+        else:
+            cnt1 += 1
+
+    while uniform and cnt0 != cnt1:
+        k = random.randrange(0, len(target))
+        if cnt0 > cnt1:
+            if target[k] == 1:
+                train_data.append(data[k][:])
+                train_target.append(target[k])
+                cnt1 += 1
+        else:
+            if target[k] == 0:
+                train_data.append(data[k][:])
+                train_target.append(target[k])
+                cnt0 += 1
+    print("in train cnt0 = {}, cnt1 = {}".format(cnt0, cnt1))
     train_set = [train_data, train_target]
 
     test_data = [data[i] for i in test_ind]
@@ -288,13 +254,22 @@ def printable_leaf(counts):
 
 
 def main_class(counts):
-    maxVal = -1
-    mainClass = -1
-    for k, v in counts.items():
-        if v > maxVal:
-            maxVal = v
-            mainClass = k
-    return mainClass
+    # maxVal = -1
+    # mainClass = -1
+    # for k, v in counts.items():
+    #     if v > maxVal:
+    #         maxVal = v
+    #         mainClass = k
+    # return mainClass
+    if len(counts) == 1:
+        for k in counts.keys():
+            return k
+    val0 = counts[0]
+    val1 = counts[1]
+    if val1 > 2.5 * val0:
+        return 1
+    else:
+        return 0
 
 
 def print_tree(node, delim=''):
@@ -320,13 +295,13 @@ def classify(dataset, node):
 
 
 def main():
-    # for every tree choose subset and build three
+    # for every tree choose subset and build tree
     # when trees are built, use test set to everyone and collect answers
-    # most popular answer is a global answer
+    # the most popular answer is the global answer
 
-    data, target = load_pool()
+    data, target = load_tsv.load_pool(stop_size=5000)
     split_ratio = 0.8
-    train_set, test_set = generate_sets(data, target, split_ratio)
+    train_set, test_set = generate_sets(data, target, split_ratio, True)
 
     print("modifying...")
     modified_train_set, buckets = categorize_train_set1(train_set)
@@ -342,8 +317,8 @@ def main():
             sub_data.append(modified_train_set[0][k])
             sub_target.append(modified_train_set[1][k])
         sub_train_set = [sub_data, sub_target]
-
-        print("build tree {}/{}...".format(i, NUM_OF_TREES))
+        if i % 10 == 0:
+            print("build tree {}/{}...".format(i, NUM_OF_TREES))
         root = build_tree(sub_train_set, 0, build_rf)
         list_of_trees.append(root)
 
