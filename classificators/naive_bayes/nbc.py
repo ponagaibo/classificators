@@ -5,24 +5,11 @@ import random
 import copy
 import time
 from loader import load_tsv
+import cProfile
 
 
 NUM_OF_BUCKETS = 400
 UNIFORM = False
-
-
-class Bucket:
-    def __init__(self, start, end, label):
-        self.start = start
-        self.end = end
-        self.label = label
-        self.cnt = 0
-
-    def add_to_cnt(self, num=1):
-        self.cnt += num
-
-    def __repr__(self):
-        return "'%s': (%s : %s], %s pcs" % (str(self.label), str(self.start), str(self.end), str(self.cnt))
 
 
 def generate_sets(data, target, split, uniform=False):
@@ -67,41 +54,41 @@ def generate_sets(data, target, split, uniform=False):
 
 def categorize_train_set(examples):
     print("categorizing train set...")
-    list_of_buckets = []
+    minimums = []
+    lens = []
+    minimums.append(0)
+    lens.append(0)
     for col in range(1, len(examples[0][0])):
         values = sorted({val[col] for val in examples[0]})
         min_val = min(values)
         max_val = max(values)
         len_of_interval = (max_val - min_val) / (NUM_OF_BUCKETS - 2)
-        cur_col_buckets = []
-        last_start = float('-inf')  # first min boundary
-        for i in range(NUM_OF_BUCKETS - 1):
-            start = last_start
-            end = min_val + len_of_interval * i
-            this_bucket = Bucket(start, end, i)
-            cur_col_buckets.append(this_bucket)
-            last_start = end
-        this_bucket = Bucket(last_start, float('+inf'), NUM_OF_BUCKETS - 1)
-        cur_col_buckets.append(this_bucket)
-        list_of_buckets.append(cur_col_buckets)
+        minimums.append(min_val)
+        lens.append(len_of_interval)
 
         for i in range(len(examples[0])):
             if len_of_interval == 0:
                 bucket_num = 0
             else:
                 bucket_num = ceil((examples[0][i][col] - min_val) / len_of_interval)
+
             examples[0][i][col] = bucket_num
-    return examples, list_of_buckets
+    return examples, minimums, lens
 
 
-def categorize_test_set(test_set, buckets):
+def categorize_test_set(test_set, minimums, lens):
     print("categorizing test set...")
     for col in range(1, len(test_set[0][0])):
         for i in range(len(test_set[0])):
-            for b in buckets[col - 1]:
-                if b.start < test_set[0][i][col] <= b.end:
-                    test_set[0][i][col] = b.label
-                    break
+            if lens[col] == 0:
+                bucket_num = 0
+            else:
+                bucket_num = ceil((test_set[0][i][col] - minimums[col]) / lens[col])
+            if bucket_num < 0:
+                bucket_num = 0
+            if bucket_num >= NUM_OF_BUCKETS - 1:
+                bucket_num = NUM_OF_BUCKETS - 1
+            test_set[0][i][col] = bucket_num
     return test_set
 
 
@@ -142,31 +129,26 @@ def get_value_freqs(examples):
 def classify(train_set, test_set, fract, pivot, train_size):
     errors = 0
     rand_errors = 0
-    cnt0 = 0
-    cnt1 = 0
 
     tp = 1
     fn = 1
     fp = 1
     tn = 1
 
-    classes = []
     train_len = len(train_set[0])
 
     class_freqs = get_class_freqs(train_set)
     val_freqs = get_value_freqs(train_set)
 
     print("    adding weights to class...")
-    fract_weight = 1
-    # fract = 1.1
-    class_freqs[1] = int(fract * fract_weight * class_freqs[1])
+    class_freqs[1] = int(fract * class_freqs[1])
     print("    adding weights to values in class...")
     for line in val_freqs[1]:
         for key in line:
-            line[key] = int(fract * fract_weight * line[key])
+            line[key] = int(fract * line[key])
 
-    # weight = 1.0395
-    weight = 1.05
+    weight = 1.0395
+    # weight = 1.05
     print("    weight:", weight)
     for ex, t in zip(test_set[0], test_set[1]):
         max_ans = float('-inf')
@@ -185,7 +167,6 @@ def classify(train_set, test_set, fract, pivot, train_size):
             if weight * cur_sum >= max_ans:  # add weight to increase precision
                 max_ans = cur_sum
                 my_class = cl
-        classes.append(my_class)
 
         rand_class = random.randint(0, train_size - 1)
         if rand_class >= pivot:
@@ -199,11 +180,6 @@ def classify(train_set, test_set, fract, pivot, train_size):
 
         if my_class != t:
             errors += 1
-
-        if my_class == 0:
-            cnt0 += 1
-        else:
-            cnt1 += 1
 
         if my_class == 1 and t == 1:
             tp += 1
@@ -222,22 +198,22 @@ def classify(train_set, test_set, fract, pivot, train_size):
     precision = tp / (tp + fp)
     f1_measure = 2 * recall * precision / (recall + precision)
     print("    errors: {} / {} => {}%,  F1: {},  R: {}, P: {}"
-          .format(errors, len(classes), round(errors / len(classes) * 100, 3),
+          .format(errors, len(test_set[0]), round(errors / len(test_set[0]) * 100, 3),
                   round(f1_measure, 3), round(recall, 3), round(precision, 3)))
-    print("    random error: {} / {} => {}%".format(rand_errors, len(classes), round(rand_errors / len(classes) * 100, 3)))
+    print("    random error: {} / {} => {}%".format(rand_errors, len(test_set[0]),
+                                                    round(rand_errors / len(test_set[0]) * 100, 3)))
 
 
 def main():
-    data, target = load_tsv.load_pool()
+    filename = "allowed"
+    data, target = load_tsv.load_pool(file=filename, my_features=True)
     # pp([data, target])
+    print("nbc")
+    print("file:", filename)
+    print("NUM_OF_BUCKETS =", NUM_OF_BUCKETS)
     split_ratio = 0.8
     print("generating sets...")
-    training_set, test_set, pivot = generate_sets(data, target, split_ratio, UNIFORM)
-
-    # print("training set:")
-    # pp(training_set)
-    # print("test set:")
-    # pp(test_set)
+    train_set, test_set, pivot = generate_sets(data, target, split_ratio, UNIFORM)
 
     train_size = int(len(data) * split_ratio)
     print("pivot: {}, train size: {}".format(pivot, train_size))
@@ -247,24 +223,20 @@ def main():
     print("cnt0 / cnt1 = ", class_fract)
 
     print("modifying...")
-    modified_train_set, buckets = categorize_train_set(training_set)
-    modified_test_set = categorize_test_set(test_set, buckets)
-
-    # print("buckets:")
-    # for b in buckets:
-    #     print(b)
-    # print("modified train set:")
-    # pp(modified_train_set)
-    # print("modifies test set:")
-    # pp(modified_test_set)
+    modified_train_set, minimums, lens = categorize_train_set(train_set)
+    modified_test_set = categorize_test_set(test_set, minimums, lens)
 
     print("classifying...")
     classify(modified_train_set, modified_test_set, class_fract, pivot, train_size)
 
 
 start_time = time.time()
+# pr = cProfile.Profile()
+# pr.enable()
 main()
+# pr.disable()
 end_time = time.time()
 diff = end_time - start_time
 print("~~~ %s sec ~~~" % diff)
 print("~ {} min ~".format(diff / 60))
+# pr.print_stats(sort="cumtime")

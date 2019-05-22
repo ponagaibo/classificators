@@ -1,18 +1,17 @@
-import pandas as pd
 from math import ceil
-import numpy as np
 import random
 from pprint import pprint as pp
 import math
 import time
 from loader import load_tsv
+import cProfile
 
 
-MAX_DEPTH = 30
-NUM_OF_BUCKETS = 8
-LEAF_SIZE = 99
+MAX_DEPTH = 100
+NUM_OF_BUCKETS = 256  # 400
+LEAF_SIZE = 101  # 301
 UNIFORM = False
-
+# попробовать 256 33, 400 301, 415 11, 128 11, 256 101, 400 33
 
 class Leaf:
     def __init__(self, examples=None, pred1=None, pred2=None, err=None):
@@ -51,20 +50,6 @@ class Question:
 
     def __repr__(self):
         return "Q: Is #%d >= %s?" % (self.column, str(self.value))
-
-
-class Bucket:
-    def __init__(self, start, end, label):
-        self.start = start
-        self.end = end
-        self.label = label
-        self.cnt = 0
-
-    def add_to_cnt(self, num=1):
-        self.cnt += num
-
-    def __repr__(self):
-        return "'%s': (%s : %s], %s pcs" % (str(self.label), str(self.start), str(self.end), str(self.cnt))
 
 
 def generate_sets(data, target, split_coef, uniform=False):
@@ -106,25 +91,19 @@ def generate_sets(data, target, split_coef, uniform=False):
     return train_set, test_set, cnt0
 
 
-def categorize_train_set1(examples):
+def categorize_train_set(examples):
     print("categorizing train set...")
-    list_of_buckets = []
+    minimums = []
+    lens = []
+    minimums.append(0)
+    lens.append(0)
     for col in range(1, len(examples[0][0])):
         values = sorted({val[col] for val in examples[0]})
         min_val = min(values)
         max_val = max(values)
         len_of_interval = (max_val - min_val) / (NUM_OF_BUCKETS - 2)
-        cur_col_buckets = []
-        last_start = float('-inf')  # first min boundary
-        for i in range(NUM_OF_BUCKETS - 1):
-            start = last_start
-            end = min_val + len_of_interval * i
-            this_bucket = Bucket(start, end, i)
-            cur_col_buckets.append(this_bucket)
-            last_start = end
-        this_bucket = Bucket(last_start, float('+inf'), NUM_OF_BUCKETS - 1)
-        cur_col_buckets.append(this_bucket)
-        list_of_buckets.append(cur_col_buckets)
+        minimums.append(min_val)
+        lens.append(len_of_interval)
 
         for i in range(len(examples[0])):
             if len_of_interval == 0:
@@ -132,17 +111,22 @@ def categorize_train_set1(examples):
             else:
                 bucket_num = ceil((examples[0][i][col] - min_val) / len_of_interval)
             examples[0][i][col] = bucket_num
-    return examples, list_of_buckets
+    return examples, minimums, lens
 
 
-def categorize_test_set1(test_set, buckets):
+def categorize_test_set(test_set, minimums, lens):
     print("categorizing test set...")
     for col in range(1, len(test_set[0][0])):
         for i in range(len(test_set[0])):
-            for b in buckets[col - 1]:
-                if b.start < test_set[0][i][col] <= b.end:
-                    test_set[0][i][col] = b.label
-                    break
+            if lens[col] == 0:
+                bucket_num = 0
+            else:
+                bucket_num = ceil((test_set[0][i][col] - minimums[col]) / lens[col])
+            if bucket_num < 0:
+                bucket_num = 0
+            if bucket_num >= NUM_OF_BUCKETS - 1:
+                bucket_num = NUM_OF_BUCKETS - 1
+            test_set[0][i][col] = bucket_num
     return test_set
 
 
@@ -158,33 +142,29 @@ def count_class(examples):
 
 
 def divide_data(examples, question):
-    true_branch, false_branch = [], []
+    true_val, false_val = [], []
+    true_targ, false_targ = [], []
     values = examples[0]
     targets = examples[1]
-    true_ind, false_ind = [], []
     for i in range(len(examples[0])):
         ex = values[i]
-        if question.match(ex):
-            true_branch.append(ex)
-            true_ind.append(i)
+        if ex[question.column] >= question.value:
+            true_val.append(ex)
+            true_targ.append(targets[i])
         else:
-            false_branch.append(ex)
-            false_ind.append(i)
-    true_branch = [true_branch, [targets[i] for i in true_ind]]
-    false_branch = [false_branch, [targets[i] for i in false_ind]]
-    return true_branch, false_branch
+            false_val.append(ex)
+            false_targ.append(targets[i])
+    true_val = [true_val, true_targ]
+    false_val = [false_val, false_targ]
+    return true_val, false_val
 
 
 def entropy(examples):
-    in_class, not_in_class = 0, 0
     targets = examples[1]
     whole_size = len(examples[0])
     # only two classes - if 1 => in class, not in class otherwise
-    for t in targets:
-        if t == 1:
-            in_class += 1
-        else:
-            not_in_class += 1
+    in_class = sum(targets)
+    not_in_class = whole_size - in_class
     if in_class == 0 or not_in_class == 0:
         return 0
     p_in = in_class / whole_size
@@ -194,52 +174,97 @@ def entropy(examples):
     return ent
 
 
-def info_gain(true_branch, false_branch, whole_entropy):
-    sum_ent = 0
-    whole_size = len(true_branch[0]) + len(false_branch[0])
-    branches = [true_branch, false_branch]
-    for b in branches:
-        this_data = b[0]
-        cur_size = len(this_data)
-        e = entropy(b)
-        sum_ent += cur_size * e / whole_size
-    info = whole_entropy - sum_ent
-    return info
+def count_all_freqs(examples):
+    n_features = len(examples[0][0]) - 1
+    all_freqs = []
+    for i in range(NUM_OF_BUCKETS):
+        tmp_features = []
+        for j in range(n_features + 1):
+            tmp_classes = []
+            for k in range(2):
+                tmp_classes.append(0)
+            tmp_features.append(tmp_classes)
+        all_freqs.append(tmp_features)
 
-
-def split_info(true_branch, false_branch):
-    len_t = float(len(true_branch[0]))
-    len_f = float(len(false_branch[0]))
-    len_whole = float(len_t + len_f)
-    sum_info = len_t / len_whole * math.log2(len_t / len_whole) + len_f / len_whole * math.log2(len_f / len_whole)
-    return -sum_info
-
-
-def gain_ratio(true_branch, false_branch, whole_entropy):
-    gain = info_gain(true_branch, false_branch, whole_entropy)
-    split = split_info(true_branch, false_branch)
-    return gain / split
+    for ex, t in zip(examples[0], examples[1]):
+        for col in range(1, n_features + 1):
+            all_freqs[ex[col]][col][t] += 1  # bucket feature_num class 4x1033x2
+    return all_freqs
 
 
 def best_question(examples):
     n_features = len(examples[0][0]) - 1
-
+    all_freqs = count_all_freqs(examples)
     best_gain_ratio = 0
     best_q = None
-    cur_entropy = entropy(examples)  # ???
-    cur_features_num = [i for i in range(1, n_features + 1)]
+    cur_entropy = entropy(examples)
 
-    for col in cur_features_num:
+    for col in range(1, n_features + 1):
         distinct_val = sorted(set(ex[col] for ex in examples[0]))
         for val in distinct_val:
-            q = Question(col, val)
-            true_branch, false_branch = divide_data(examples, q)
-            if len(true_branch[0]) == 0 or len(false_branch[0]) == 0:
+            true0 = 0
+            true1 = 0
+            false0 = 0
+            false1 = 0
+            cnt_true = 0
+            cnt_false = 0
+            for i in range(0, NUM_OF_BUCKETS):
+                if i >= val:
+                    true0 += all_freqs[i][col][0]
+                    true1 += all_freqs[i][col][1]
+                    cnt_true += sum(all_freqs[i][col])
+                else:
+                    false0 += all_freqs[i][col][0]
+                    false1 += all_freqs[i][col][1]
+                    cnt_false += sum(all_freqs[i][col])
+
+            if cnt_true == 0 or cnt_false == 0:
                 continue
-            cur_gain_ratio = gain_ratio(true_branch, false_branch, cur_entropy)
+
+            # leaf size
+            # if cnt_true < LEAF_SIZE or cnt_false < LEAF_SIZE:
+            #     continue
+
+            # info_gain
+            sum_ent = 0
+            whole_size = float(len(examples[0]))
+
+            len_t = float(cnt_true)
+            # entropy
+            if true1 == 0 or true0 == 0:
+                continue
+            pt_in = true1 / whole_size
+            pt_not_in = true0 / whole_size
+            e_true = -pt_in * math.log2(pt_in) - pt_not_in * math.log2(pt_not_in)
+            # ---
+            sum_ent += len_t * e_true / whole_size
+
+            len_f = float(cnt_false)
+            # entropy
+            if false1 == 0 or false0 == 0:
+                continue
+            pf_in = false1 / whole_size
+            pf_not_in = false0 / whole_size
+            e_false = -pf_in * math.log2(pf_in) - pf_not_in * math.log2(pf_not_in)
+            # ---
+
+            sum_ent += len_f * e_false / whole_size
+            gain = cur_entropy - sum_ent
+            # ---
+
+            # split_info
+            true_ratio = len_t / whole_size
+            false_ratio = len_f / whole_size
+            split = -true_ratio * math.log2(true_ratio) - len_f / false_ratio * math.log2(false_ratio)
+            # ---
+
+            # gain_ratio
+            cur_gain_ratio = gain / split
+            # ---
+
             if cur_gain_ratio > best_gain_ratio:
                 best_gain_ratio = cur_gain_ratio
-                best_q = q
+                best_q = Question(col, val)
     return best_gain_ratio, best_q
 
 
@@ -274,27 +299,14 @@ def printable_leaf(counts):
     return probs
 
 
-def main_class(counts):
-    # max_val = -1
-    # main_cl = -1
-    # print('count:', counts.items())
-    # print(counts[0])
-    # print(counts[1])
-    # for k, v in counts.items():
-    #     print("k: {}, v: {}".format(k, v))
-    #     if v > max_val:
-    #         max_val = v
-    #         main_cl = k
-    # return main_cl
+def main_class(counts, coef):
     if len(counts) == 1:
         for k in counts.keys():
             return k
     val0 = counts[0]
     val1 = counts[1]
-    coef = 1.0
-    if UNIFORM:
-        coef = 2.5
-    if val1 > coef * val0:
+
+    if val1 / (val0 + val1) >= coef:
         return 1
     else:
         return 0
@@ -324,7 +336,7 @@ def classify(dataset, node):
 
 def count_errors(dataset, target, node):
     if isinstance(node, Leaf):
-        if target != main_class(node.predictions):
+        if target != main_class(node.predictions, 1): # changed!!
             node.errors += 1
         return node.predictions
 
@@ -372,8 +384,71 @@ def prune(tree):
     return tree
 
 
+def measure(dataset, tree, weight, train_size, pivot):
+    train_classes = []
+    train_data = dataset[0]
+    train_target = dataset[1]
+    for i in range(len(dataset[0])):
+        c = classify(train_data[i], tree)
+        # print("c:", c)
+        train_classes.append(c)
+
+    errors = 0
+    tp = 1
+    tn = 1
+    fn = 1
+    fp = 1
+    rand_errors = 0
+    for i in range(len(dataset[0])):
+        my_class = main_class(train_classes[i], weight)
+        rand_class = random.randint(0, train_size - 1)
+        t = train_target[i]
+        if rand_class >= pivot:
+            rand_class = 1
+        else:
+            rand_class = 0
+
+        if rand_class != t:
+            rand_errors += 1
+
+        if my_class != t:
+            errors += 1
+
+        if my_class == 1 and t == 1:
+            tp += 1
+
+        if my_class == 0 and t == 0:
+            tn += 1
+
+        if my_class == 0 and t == 1:
+            fn += 1
+
+        if my_class == 1 and t == 0:
+            fp += 1
+    print("tp: {}, fn: {}, fp: {}, tn: {}".format(tp - 1, fn - 1, fp - 1, tn - 1))
+    recall = tp / (tp + fn)
+    precision = tp / (tp + fp)
+    f1_measure = 2 * recall * precision / (recall + precision)
+
+    print("    errors: {} / {} => {}%,  F1: {},  R: {}, P: {}"
+          .format(errors, len(train_target), round(errors / len(train_target) * 100, 3),
+                  round(f1_measure, 3), round(recall, 3), round(precision, 3)))
+    print("    random error: {} / {} => {}%".format(rand_errors, len(train_target),
+                                                    round(rand_errors / len(train_target) * 100, 3)))
+
+
 def main():
-    data, target = load_tsv.load_pool(stop_size=10000)
+    my_f = False
+    filename = "pool"
+    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=10000)
+
+    print("c4.5")
+    print("file:", filename)
+    print("my features:", my_f)
+    print("MAX_DEPTH =", MAX_DEPTH)
+    print("NUM_OF_BUCKETS =", NUM_OF_BUCKETS)
+    print("LEAF_SIZE =", LEAF_SIZE)
+
     split_ratio = 0.8
     train_set, test_set, pivot = generate_sets(data, target, split_ratio, UNIFORM)
     train_size = int(len(data) * split_ratio)
@@ -381,9 +456,14 @@ def main():
         train_size = pivot * 2
     print("train size: {}, pivot: {}".format(train_size, pivot))
 
+    cnt0 = pivot
+    cnt1 = train_size - cnt0
+    class_fract = cnt1 / cnt0
+    print("cnt1 / cnt0 = ", class_fract)
+
     print("modifying...")
-    modified_train_set, buckets = categorize_train_set1(train_set)
-    modified_test_set = categorize_test_set1(test_set, buckets)
+    modified_train_set, minimums, lens = categorize_train_set(train_set)
+    modified_test_set = categorize_test_set(test_set, minimums, lens)
 
     print("building tree...")
     root = build_tree(modified_train_set, 0)
@@ -395,62 +475,32 @@ def main():
     test_data = modified_test_set[0]
     test_target = modified_test_set[1]
 
-    for i in range(len(modified_test_set[0])):
-        count_errors(train_data[i], train_target[i], root)
+    # for i in range(len(modified_test_set[0])):
+    #     count_errors(train_data[i], train_target[i], root)
 
     # print("pruning...")
     # count_and_prune(root, modified_train_set)
 
-    all_classes = []
-    print("\nclassifying...")
-    for i in range(len(modified_test_set[0])):
-        c = classify(test_data[i], root)
-        # print("c:", c)
-        all_classes.append(c)
+    print("checking training set...")
+    # print("    adding weights to values in class...")
+    weight = class_fract  # при 0.22 ставит мало класса 1, при 0.6 чаще
+    print("    weight =", weight)
+    measure(modified_train_set, root, weight, train_size, pivot)
 
-    errors = 0
-    tp = 1
-    tn = 1
-    fn = 1
-    fp = 1
-    rand_errors = 0
-    for i in range(len(modified_test_set[0])):
-        my_class = main_class(all_classes[i])
-        rand_class = random.randint(0, train_size - 1)
-        if rand_class >= pivot:
-            rand_class = 1
-        else:
-            rand_class = 0
-
-        if rand_class != test_target[i]:
-            rand_errors += 1
-
-        if my_class != test_target[i]:
-            errors += 1
-
-        if my_class == 1 and test_target[i] == 1:
-            tp += 1
-
-        if my_class == 0 and test_target[i] == 0:
-            tn += 1
-
-        if my_class == 0 and test_target[i] == 1:
-            fn += 1
-
-        if my_class == 1 and test_target[i] == 0:
-            fp += 1
-    print("tp: {}, fn: {}, fp: {}, tn: {}".format(tp-1, fn-1, fp-1, tn-1))
-    recall = tp / (tp + fn)
-    precision = tp / (tp + fp)
-    f1_measure = 2 * recall * precision / (recall + precision)
-    print("errors: {} / {} => {}%,  F1: {},  R: {}, P: {}".
-          format(errors, len(test_target), errors / len(test_target) * 100, f1_measure, recall, precision))
-    print("random error: {} / {} => {}%".format(rand_errors, len(test_target), rand_errors / len(test_target) * 100))
+    print("classifying...")
+    measure(modified_test_set, root, weight, train_size, pivot)
 
 
 start_time = time.time()
+
+# pr = cProfile.Profile()
+# pr.enable()
 main()
+# pr.disable()
+
 end_time = time.time()
 diff = end_time - start_time
 print("~~~ %s sec ~~~" % diff)
 print("~ {} min ~".format(diff / 60))
+
+# pr.print_stats(sort="cumtime")
