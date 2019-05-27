@@ -6,6 +6,7 @@ import copy
 import time
 from loader import load_tsv
 import cProfile
+import sys
 
 
 NUM_OF_BUCKETS = 400
@@ -147,7 +148,7 @@ def classify(train_set, test_set, fract, pivot, train_size):
         for key in line:
             line[key] = int(fract * line[key])
 
-    weight = 1.0395
+    weight = 1.05
     # weight = 1.05
     print("    weight:", weight)
     for ex, t in zip(test_set[0], test_set[1]):
@@ -205,11 +206,13 @@ def classify(train_set, test_set, fract, pivot, train_size):
 
 
 def main():
-    filename = "allowed"
-    data, target = load_tsv.load_pool(file=filename, my_features=True)
+    my_f = False
+    filename = "shuffled"
+    data, target = load_tsv.load_pool(file=filename, my_features=True, stop_size=50000)
     # pp([data, target])
     print("nbc")
     print("file:", filename)
+    print("my features:", my_f)
     print("NUM_OF_BUCKETS =", NUM_OF_BUCKETS)
     split_ratio = 0.8
     print("generating sets...")
@@ -233,7 +236,14 @@ def main():
 start_time = time.time()
 # pr = cProfile.Profile()
 # pr.enable()
-main()
+orig_stdout = sys.stdout
+f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\nbc_res_without', 'w')
+sys.stdout = f
+for NUM_OF_BUCKETS in range(10, 420, 10):
+    main()
+sys.stdout = orig_stdout
+f.close()
+print("done without my f")
 # pr.disable()
 end_time = time.time()
 diff = end_time - start_time

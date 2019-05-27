@@ -7,11 +7,12 @@ from loader import load_tsv
 import cProfile
 
 
-MAX_DEPTH = 100
-NUM_OF_BUCKETS = 256  # 400
-LEAF_SIZE = 101  # 301
+MAX_DEPTH = 3  # 40
+NUM_OF_BUCKETS = 6  # 16
+LEAF_SIZE = 431  # 55
 UNIFORM = False
 # попробовать 256 33, 400 301, 415 11, 128 11, 256 101, 400 33
+
 
 class Leaf:
     def __init__(self, examples=None, pred1=None, pred2=None, err=None):
@@ -177,18 +178,23 @@ def entropy(examples):
 def count_all_freqs(examples):
     n_features = len(examples[0][0]) - 1
     all_freqs = []
-    for i in range(NUM_OF_BUCKETS):
+
+    # инициализация:
+    for i in range(NUM_OF_BUCKETS):  # для каждого возможного значения фичи (бакета)
         tmp_features = []
-        for j in range(n_features + 1):
+        for j in range(n_features + 1):  # для каждой фичи создаем массив под классы
             tmp_classes = []
-            for k in range(2):
+            for k in range(2):  # в него добавляем нули для каждого класса
                 tmp_classes.append(0)
-            tmp_features.append(tmp_classes)
+            tmp_features.append(tmp_classes)  # добавляем такой массив каждой фиче
         all_freqs.append(tmp_features)
 
-    for ex, t in zip(examples[0], examples[1]):
-        for col in range(1, n_features + 1):
-            all_freqs[ex[col]][col][t] += 1  # bucket feature_num class 4x1033x2
+    # подсчет:
+    for ex, t in zip(examples[0], examples[1]):  # смотрим текущий пример и класс
+        for col in range(1, n_features + 1):  # смотрим все фичи
+            all_freqs[ex[col]][col][t] += 1  # [bucket] [feature_num] [class] => NUM_OF_BUCKETS x 1113 x 2
+            # ex[col] => получаем значение фичи под номером col
+            # увеличиваем счетчик для этого бакета, для фичи с номером=col и классом=t
     return all_freqs
 
 
@@ -232,20 +238,22 @@ def best_question(examples):
             len_t = float(cnt_true)
             # entropy
             if true1 == 0 or true0 == 0:
-                continue
-            pt_in = true1 / whole_size
-            pt_not_in = true0 / whole_size
-            e_true = -pt_in * math.log2(pt_in) - pt_not_in * math.log2(pt_not_in)
+                e_true = 0
+            else:
+                pt_in = true1 / len_t
+                pt_not_in = true0 / len_t
+                e_true = -pt_in * math.log2(pt_in) - pt_not_in * math.log2(pt_not_in)
             # ---
             sum_ent += len_t * e_true / whole_size
 
             len_f = float(cnt_false)
             # entropy
             if false1 == 0 or false0 == 0:
-                continue
-            pf_in = false1 / whole_size
-            pf_not_in = false0 / whole_size
-            e_false = -pf_in * math.log2(pf_in) - pf_not_in * math.log2(pf_not_in)
+                e_false = 0
+            else:
+                pf_in = false1 / len_f
+                pf_not_in = false0 / len_f
+                e_false = -pf_in * math.log2(pf_in) - pf_not_in * math.log2(pf_not_in)
             # ---
 
             sum_ent += len_f * e_false / whole_size
@@ -259,7 +267,8 @@ def best_question(examples):
             # ---
 
             # gain_ratio
-            cur_gain_ratio = gain / split
+            # cur_gain_ratio = gain / split  # test gain instead gain ratio!!!
+            cur_gain_ratio = gain
             # ---
 
             if cur_gain_ratio > best_gain_ratio:
@@ -435,12 +444,13 @@ def measure(dataset, tree, weight, train_size, pivot):
                   round(f1_measure, 3), round(recall, 3), round(precision, 3)))
     print("    random error: {} / {} => {}%".format(rand_errors, len(train_target),
                                                     round(rand_errors / len(train_target) * 100, 3)))
+    return f1_measure
 
 
 def main():
-    my_f = False
-    filename = "pool"
-    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=10000)
+    my_f = True
+    filename = "shuffled"
+    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=5000)
 
     print("c4.5")
     print("file:", filename)
@@ -458,7 +468,7 @@ def main():
 
     cnt0 = pivot
     cnt1 = train_size - cnt0
-    class_fract = cnt1 / cnt0
+    class_fract = cnt1 / (cnt0 + cnt1)
     print("cnt1 / cnt0 = ", class_fract)
 
     print("modifying...")
@@ -469,26 +479,20 @@ def main():
     root = build_tree(modified_train_set, 0)
     # print_tree(root)
 
-    train_data = modified_train_set[0]
-    train_target = modified_train_set[1]
-
-    test_data = modified_test_set[0]
-    test_target = modified_test_set[1]
-
     # for i in range(len(modified_test_set[0])):
     #     count_errors(train_data[i], train_target[i], root)
-
     # print("pruning...")
     # count_and_prune(root, modified_train_set)
 
-    print("checking training set...")
     # print("    adding weights to values in class...")
     weight = class_fract  # при 0.22 ставит мало класса 1, при 0.6 чаще
     print("    weight =", weight)
+    print("checking training set...")
     measure(modified_train_set, root, weight, train_size, pivot)
 
     print("classifying...")
-    measure(modified_test_set, root, weight, train_size, pivot)
+    f1_m = measure(modified_test_set, root, weight, train_size, pivot)
+    return f1_m
 
 
 start_time = time.time()

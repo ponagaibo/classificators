@@ -80,7 +80,6 @@ def generate_sets(data, target, split, uniform=False):
     cnt1 = 0
     train_data = [data[i] for i in train_ind]
     train_target = []
-    # train_target = [target[i] for i in train_ind]
     for i in train_ind:
         train_target.append(target[i])
         if target[i] == 0:
@@ -116,7 +115,7 @@ def print_importances(clf):
 
     print("Feature ranking:")
     for f in range(len(indices)):
-        if indices[f] < 1110:
+        if indices[f] < 1113:
             continue
         print("%d. feature %d (%f)" % (f + 1, indices[f], importances[indices[f]]))
 
@@ -129,6 +128,8 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
         filename = "\out_common"
     elif file == "allowed":
         filename = "\out_allowed"
+    elif file == "shuffled":
+        filename = "\shuf"
     else:
         print("filename error")
 
@@ -143,9 +144,8 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
     cnt1 = 0
     len_of_facts = len(list(str(df.values[0][1])[8:].split()))
 
-    print("len:", len_of_facts)
+    # print("len:", len_of_facts)
     for ex in df.values:
-        # pp(ex)
         query = str(ex[0])[6:]
 
         if query == "":
@@ -156,6 +156,11 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
         targ = int(str(ex[3])[7:])
         clicks = list(str(ex[4])[7:].split())
         clicks = list(map(int, clicks))
+        len_c = len(clicks)
+        if len_c == 0:
+            continue
+        # if len_c != 10 and len_c != 15:
+        #     print("{}: len of clicks: {}".format(cnt, len(clicks)))
 
         if len(facts) != len_of_facts:
             continue
@@ -166,25 +171,70 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
         if my_features:
             # print("clicks:", clicks)
             num_of_clicks = sum(clicks)
+            clicks1 = clicks[0]
+            clicks2 = sum(clicks[:2])
+            clicks3 = sum(clicks[:3])
+            clicks4 = sum(clicks[:4])
             clicks5 = sum(clicks[:5])
+            clicks6 = sum(clicks[:6])
+            clicks7 = sum(clicks[:7])
+            clicks8 = sum(clicks[:8])
+            clicks9 = sum(clicks[:9])
             clicks10 = sum(clicks[:10])
+            clicks11 = sum(clicks[:11])
+            clicks12 = sum(clicks[:12])
+            clicks13 = sum(clicks[:13])
+            clicks14 = sum(clicks[:14])
+            clicks15 = sum(clicks[:15])
+            num_clicked_sport = 0
+            num_clicked_fh = 0
 
             # print("sum:", num_of_clicks)
+            sport_hosts = open(r'C:\Users\Anastasiya\Desktop\диплом\project\classificators\parser\orig_sport_hosts.txt',
+                           'r', encoding='utf-8')
+            sport_hosts_list = sport_hosts.read().split()
+            sport_hosts.close()
+
             f_hosts = open(r'C:\Users\Anastasiya\Desktop\диплом\project\classificators\parser\football_hosts.txt',
                            'r', encoding='utf-8')
-            sport_hosts = f_hosts.read().split()
+            f_h_hosts_list = f_hosts.read().split()
             f_hosts.close()
 
             hosts_to_check = {}
             cnt_ = 0
             top1 = False
+            top2 = False
             top3 = False
+            top4 = False
             top5 = False
+            top6 = False
             top7 = False
+            top8 = False
+            top9 = False
             top10 = False
+            top11 = False
+            top12 = False
+            top13 = False
+            top14 = False
             top15 = False
 
+            top1_fh = False
+            top2_fh = False
+            top3_fh = False
+            top4_fh = False
+            top5_fh = False
+            top6_fh = False
+            top7_fh = False
+            top8_fh = False
+            top9_fh = False
+            top10_fh = False
+            top11_fh = False
+            top12_fh = False
+            top13_fh = False
+            top14_fh = False
+            top15_fh = False
             sport_amount = 0
+            fh_amount = 0
             for u in urls:
                 whole_url = u.split("/")
                 whole_url = list(filter(None, whole_url))
@@ -208,60 +258,160 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
                         and len(whole_url) >= 3):
                     cnt_ += 1
 
-                best_host = ""
+                best_host_sport = ""
+                best_host_fh = ""
+                place_of_best_host_sport = 0
+                place_of_best_host_fh = 0
                 if host_with_two_dirs != "":
                     if hosts_to_check.get(host_with_two_dirs) is not None:
                         continue
                     # print("!   " + host_with_two_dirs + " in sport! place: " + str(cnt_))
                     hosts_to_check[host_with_two_dirs] = cnt_
-                    if host_with_two_dirs in sport_hosts:
-                        best_host = host_with_two_dirs
+                    if host_with_two_dirs in sport_hosts_list:
+                        best_host_sport = host_with_two_dirs
+                        place_of_best_host_sport = cnt_
+                    if host_with_two_dirs in f_h_hosts_list:
+                        best_host_fh = host_with_two_dirs
+                        place_of_best_host_fh = cnt_
 
                 if host_with_one_dir != "":
                     if hosts_to_check.get(host_with_one_dir) is not None:
                         continue
                     # print("!   " + host_with_one_dir + " in sport! place: " + str(cnt_))
                     hosts_to_check[host_with_one_dir] = cnt_
-                    if host_with_one_dir in sport_hosts:
-                        best_host = host_with_one_dir
+                    if host_with_one_dir in sport_hosts_list:
+                        best_host_sport = host_with_one_dir
+                        place_of_best_host_sport = cnt_
+                    if host_with_one_dir in f_h_hosts_list:
+                        best_host_fh = host_with_one_dir
+                        place_of_best_host_fh = cnt_
 
                 if hosts_to_check.get(host) is not None:
                     continue
                 hosts_to_check[host] = cnt_
-                if host in sport_hosts:
-                    best_host = host
-                if best_host != "":
+                if host in sport_hosts_list:
+                    best_host_sport = host
+                    place_of_best_host_sport = cnt_
+                if host in f_h_hosts_list:
+                    best_host_fh = host
+                    place_of_best_host_fh = cnt_
+
+                if best_host_sport != "":
+                    if clicks[place_of_best_host_sport-1] == 1:
+                        num_clicked_sport += 1
                     sport_amount += 1
-                    # print("!   " + best_host + " in sport! place: " + str(cnt_))
+                    # print("!   " + best_host_sport + " in sport! place: " + str(cnt_))
                     if cnt_ == 1:
                         top1 = True
+                    if cnt_ <= 2:
+                        top2 = True
                     if cnt_ <= 3:
                         top3 = True
+                    if cnt_ <= 4:
+                        top4 = True
                     if cnt_ <= 5:
                         top5 = True
+                    if cnt_ <= 6:
+                        top6 = True
                     if cnt_ <= 7:
                         top7 = True
+                    if cnt_ <= 8:
+                        top8 = True
+                    if cnt_ <= 9:
+                        top9 = True
                     if cnt_ <= 10:
                         top10 = True
+                    if cnt_ <= 11:
+                        top11 = True
+                    if cnt_ <= 12:
+                        top12 = True
+                    if cnt_ <= 13:
+                        top13 = True
+                    if cnt_ <= 14:
+                        top14 = True
                     if cnt_ <= 15:
                         top15 = True
+
+                if best_host_fh != "":
+                    if clicks[place_of_best_host_fh-1] == 1:
+                        num_clicked_fh += 1
+                    fh_amount += 1
+                    # print("!   " + best_host_sport + " in sport! place: " + str(cnt_))
+                    if cnt_ == 1:
+                        top1_fh = True
+                    if cnt_ <= 2:
+                        top2_fh = True
+                    if cnt_ <= 3:
+                        top3_fh = True
+                    if cnt_ <= 4:
+                        top4_fh = True
+                    if cnt_ <= 5:
+                        top5_fh = True
+                    if cnt_ <= 6:
+                        top6_fh = True
+                    if cnt_ <= 7:
+                        top7_fh = True
+                    if cnt_ <= 8:
+                        top8_fh = True
+                    if cnt_ <= 9:
+                        top9_fh = True
+                    if cnt_ <= 10:
+                        top10_fh = True
+                    if cnt_ <= 11:
+                        top11_fh = True
+                    if cnt_ <= 12:
+                        top12_fh = True
+                    if cnt_ <= 13:
+                        top13_fh = True
+                    if cnt_ <= 14:
+                        top14_fh = True
+                    if cnt_ <= 15:
+                        top15_fh = True
             # print("top1: {}, top3: {}, top5: {}, top7: {}, top10: {}, top15: {}".
             #       format(str(top1), str(top3), str(top5), str(top7), str(top10), str(top15)))
-            query_facts.append(int(top1))
-            query_facts.append(int(top3))
-            query_facts.append(int(top5))
-            query_facts.append(int(top7))
+
+            # query_facts.append(int(top1))
+            # query_facts.append(int(top2))
+            # query_facts.append(int(top3))
+            # query_facts.append(int(top4))
+            # query_facts.append(int(top5))
+            # query_facts.append(int(top6))
+            # query_facts.append(int(top7))
+            # query_facts.append(int(top8))
+            # query_facts.append(int(top9))
             query_facts.append(int(top10))
-            query_facts.append(int(top15))
+            query_facts.append(int(top10_fh))
+            # query_facts.append(int(top11))
+            # query_facts.append(int(top12))
+            # query_facts.append(int(top13))
+            # query_facts.append(int(top14))
+            # query_facts.append(int(top15))
+
             query_facts.append(num_of_clicks)
-            query_facts.append(clicks5)
+
+            # query_facts.append(clicks1)
+            # query_facts.append(clicks2)
+            # query_facts.append(clicks3)
+            # query_facts.append(clicks4)
+            # query_facts.append(clicks5)
+            # query_facts.append(clicks6)
+            # query_facts.append(clicks7)
+            # query_facts.append(clicks8)
+            # query_facts.append(clicks9)
             query_facts.append(clicks10)  # на 3 месте
+            # query_facts.append(clicks11)
+            # query_facts.append(clicks12)
+            # query_facts.append(clicks13)
+            # query_facts.append(clicks14)
+            # query_facts.append(clicks15)
+
             query_facts.append(sport_amount)
+            query_facts.append(fh_amount)
+            query_facts.append(num_clicked_sport)
+            query_facts.append(num_clicked_fh)
 
         # print("new query facts:", query_facts)
-        # print("len:", len(query_facts))
         cur_list += list(map(float, query_facts))
-        # print(cur_list)
 
         if half_size is not None:
             if cnt0 == half_size and cnt1 < half_size and targ == 0:
@@ -274,7 +424,7 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
             target.append(0)
             cnt0 += 1
         else:
-            target.append(1)
+            target.append(1)  # not inverted!!!
             cnt1 += 1
 
         cnt += 1
@@ -294,8 +444,8 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
 
 def main():
     my_f = True
-    filename = "pool"
-    data, target = load_pool2(filename, my_features=my_f, stop_size=60000)
+    filename = "shuffled"
+    data, target = load_pool2(filename, my_features=my_f, stop_size=100000)
     split_ratio = 0.8
 
     print("catboost")
@@ -310,7 +460,10 @@ def main():
     if UNIFORM:
         train_size = pivot * 2
     print("train size: {}, pivot: {}".format(train_size, pivot))
-    # pp(data[0])
+    cnt0 = pivot
+    cnt1 = train_size - cnt0
+    fract = cnt0 / cnt1
+    print("fract:", fract)
 
     train_data = training_set[0]
     train_labels = training_set[1]
@@ -319,11 +472,11 @@ def main():
     print("classifying...")
     weight = 0.78
     print("weight of class 1:", weight)
-    model = CatBoostClassifier(iterations=10, class_weights=[1, 4])
+    model = CatBoostClassifier(iterations=1500, class_weights=[1, fract])
     model.fit(train_data, train_labels)
     prediction = model.predict(test_data)
 
-    # print_importances(model)
+    print_importances(model)
 
     error_cnt = 0
     tp = 1

@@ -1,3 +1,5 @@
+import sys
+import time
 import pandas as pd
 import numpy as np
 import random
@@ -6,10 +8,11 @@ import math
 from loader import load_tsv
 
 
-MAX_DEPTH = 5
-NUM_OF_BUCKETS = 128
-NUM_OF_TREES = 100
-LEAF_SIZE = 11
+MAX_DEPTH = 3
+NUM_OF_BUCKETS = 8
+LEAF_SIZE = 431
+
+NUM_OF_TREES = 50
 UNIFORM = False
 
 
@@ -141,7 +144,7 @@ def count_all_freqs(examples):
 
 def best_question(examples, rf=False):
     n_features = len(examples[0][0]) - 1
-    feature_amount = math.sqrt(n_features)
+    feature_amount = math.sqrt(n_features) * 1.1
     all_freqs = count_all_freqs(examples)
     best_gain_ratio = 0
     best_q = None
@@ -175,10 +178,6 @@ def best_question(examples, rf=False):
             if cnt_true == 0 or cnt_false == 0:
                 continue
 
-            # leaf size
-            # if cnt_true < LEAF_SIZE or cnt_false < LEAF_SIZE:
-            #     continue
-
             # info_gain
             sum_ent = 0
             whole_size = float(len(examples[0]))
@@ -186,20 +185,22 @@ def best_question(examples, rf=False):
             len_t = float(cnt_true)
             # entropy
             if true1 == 0 or true0 == 0:
-                continue
-            pt_in = true1 / whole_size
-            pt_not_in = true0 / whole_size
-            e_true = -pt_in * math.log2(pt_in) - pt_not_in * math.log2(pt_not_in)
+                e_true = 0
+            else:
+                pt_in = true1 / len_t
+                pt_not_in = true0 / len_t
+                e_true = -pt_in * math.log2(pt_in) - pt_not_in * math.log2(pt_not_in)
             # ---
             sum_ent += len_t * e_true / whole_size
 
             len_f = float(cnt_false)
             # entropy
             if false1 == 0 or false0 == 0:
-                continue
-            pf_in = false1 / whole_size
-            pf_not_in = false0 / whole_size
-            e_false = -pf_in * math.log2(pf_in) - pf_not_in * math.log2(pf_not_in)
+                e_false = 0
+            else:
+                pf_in = false1 / len_f
+                pf_not_in = false0 / len_f
+                e_false = -pf_in * math.log2(pf_in) - pf_not_in * math.log2(pf_not_in)
             # ---
 
             sum_ent += len_f * e_false / whole_size
@@ -213,7 +214,8 @@ def best_question(examples, rf=False):
             # ---
 
             # gain_ratio
-            cur_gain_ratio = gain / split
+            # cur_gain_ratio = gain / split  # test gain instead gain ratio!!!
+            cur_gain_ratio = gain
             # ---
 
             if cur_gain_ratio > best_gain_ratio:
@@ -223,6 +225,9 @@ def best_question(examples, rf=False):
 
 
 def build_tree(examples, cur_depth, rf=False):
+    if len(examples[0]) < LEAF_SIZE:
+        # print("    Max leaf size is reached!")
+        return Leaf(examples)
     if cur_depth == MAX_DEPTH:
         print("max depth reached!")
         return Leaf(examples)
@@ -285,13 +290,14 @@ def printable_leaf(counts):
     return probs
 
 
-def main_class(counts):
+def main_class(counts, coef):
     if len(counts) == 1:
         for k in counts.keys():
             return k
     val0 = counts[0]
     val1 = counts[1]
-    if val1 > 2.5 * val0:
+
+    if val1 / (val0 + val1) >= coef:
         return 1
     else:
         return 0
@@ -320,20 +326,29 @@ def classify(dataset, node):
 
 
 def main():
-    filename = "common"
-    data, target = load_tsv.load_pool(filename, stop_size=10000)
+    my_f = True
+    filename = "shuffled"
+    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=5000)
+
     print("rf")
     print("file:", filename)
+    print("my features:", my_f)
     print("MAX_DEPTH =", MAX_DEPTH)
     print("NUM_OF_BUCKETS =", NUM_OF_BUCKETS)
-    print("NUM_OF_TREES =", NUM_OF_TREES)
     print("LEAF_SIZE =", LEAF_SIZE)
+    print("NUM_OF_TREES =", NUM_OF_TREES)
+
     split_ratio = 0.8
     train_set, test_set, pivot = generate_sets(data, target, split_ratio, UNIFORM)
     train_size = int(len(data) * split_ratio)
     if UNIFORM:
         train_size = pivot * 2
     print("train size: {}, pivot: {}".format(train_size, pivot))
+
+    cnt0 = pivot
+    cnt1 = train_size - cnt0
+    class_fract = cnt1 / (cnt0 + cnt1)
+    print("cnt1 / cnt0 = ", class_fract)
 
     print("modifying...")
     modified_train_set, minimums, lens = categorize_train_set(train_set)
@@ -358,6 +373,8 @@ def main():
     test_target = modified_test_set[1]
 
     all_classes = []
+    weight = class_fract  # при 0.22 ставит мало класса 1, при 0.6 чаще
+    print("    weight =", weight)
     print("classifying...")
     for i in range(len(modified_test_set[0])):
         total_classes = {}
@@ -378,29 +395,30 @@ def main():
     fp = 1
     rand_errors = 0
     for i in range(len(modified_test_set[0])):
-        my_class = main_class(all_classes[i])
+        my_class = main_class(all_classes[i], weight)
         rand_class = random.randint(0, train_size - 1)
+        t = test_target[i]
         if rand_class >= pivot:
             rand_class = 1
         else:
             rand_class = 0
 
-        if rand_class != test_target[i]:
+        if rand_class != t:
             rand_errors += 1
 
-        if my_class != test_target[i]:
+        if my_class != t:
             errors += 1
 
-        if my_class == 1 and test_target[i] == 1:
+        if my_class == 1 and t == 1:
             tp += 1
 
-        if my_class == 0 and test_target[i] == 0:
+        if my_class == 0 and t == 0:
             tn += 1
 
-        if my_class == 0 and test_target[i] == 1:
+        if my_class == 0 and t == 1:
             fn += 1
 
-        if my_class == 1 and test_target[i] == 0:
+        if my_class == 1 and t == 0:
             fp += 1
 
     print("tp: {}, fn: {}, fp: {}, tn: {}".format(tp-1, fn-1, fp-1, tn-1))
@@ -414,4 +432,18 @@ def main():
                                                     round(rand_errors / len(test_target) * 100, 3)))
 
 
+start_time = time.time()
+# orig_stdout = sys.stdout
+# f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\rf_12_sq', 'w')
+# sys.stdout = f
+# for MAX_DEPTH in range(3, 11):
+#     for NUM_OF_BUCKETS in range(4, 10, 2):
 main()
+# sys.stdout = orig_stdout
+# f.close()
+print("done rf 1.2")
+end_time = time.time()
+diff = end_time - start_time
+print("~~~ %s sec ~~~" % diff)
+print("~ {} min ~".format(diff / 60))
+
