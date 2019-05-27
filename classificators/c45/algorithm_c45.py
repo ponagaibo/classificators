@@ -7,8 +7,8 @@ from loader import load_tsv
 import cProfile
 
 
-MAX_DEPTH = 3  # 40
-NUM_OF_BUCKETS = 6  # 16
+MAX_DEPTH = 4  # 40
+NUM_OF_BUCKETS = 32  # 16
 LEAF_SIZE = 431  # 55
 UNIFORM = False
 # попробовать 256 33, 400 301, 415 11, 128 11, 256 101, 400 33
@@ -450,7 +450,7 @@ def measure(dataset, tree, weight, train_size, pivot):
 def main():
     my_f = True
     filename = "shuffled"
-    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=5000)
+    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=100000)
 
     print("c4.5")
     print("file:", filename)

@@ -436,11 +436,11 @@ def draw_d5_b6():
     data[681] = 0.40389300924508936
     data[691] = 0.4254948066116473
     data[701] = 0.43329026206310567
-    plot.plot(list(sorted(data.keys())), list(v for k, v in sorted(data.items())), marker=".", label='b=4', linewidth=1)
+    plot.plot(list(sorted(data.keys())), list(v for k, v in sorted(data.items())), marker=".", linewidth=1)
 
-    plot.xlabel('max depth')
+    plot.xlabel('leaf size')
     plot.ylabel('f1')
-    plot.title('num of buckets = 89')
+    # plot.title('num of buckets = 89')
     plot.xticks([i for i in range(31, 711, 50)])
     plot.grid()
 
@@ -553,7 +553,7 @@ def rf_d_b():
     data[7] = (0.438 + 0.456 + 0.443) / 3
     data[8] = (0.429 + 0.427 + 0.469) / 3
     data[9] = (0.487 + 0.45 + 0.424) / 3
-    data[10] = (0.431 + 0.492 + 0.448) / 3
+    data[10] = (0.431 + 0.452 + 0.448 + 0.426 + 0.472 + 0.471) / 6
 
     plot.plot(list(sorted(data.keys())), list(v for k, v in sorted(data.items())), marker=".",
               label='number of features = 1.0 * sqrt(n)', linewidth=1)
@@ -561,14 +561,27 @@ def rf_d_b():
     data = {}
     data[3] = (0.393 + 0.403 + 0.446 + 0.396 + 0.42 + 0.424) / 6
     data[4] = (0.467 + 0.508 + 0.415 + 0.419 + 0.415 + 0.397) / 6
-    data[5] = (0.424 + 0.428 + 0.428 + 0.413 + 0.427 + 0.44) / 6
-    data[6] = (0.4 + 0.425 + 0.437 + 0.462 + 0.447 + 0.44) / 6
+    data[5] = (0.424 + 0.428 + 0.428 + 0.443 + 0.427 + 0.44) / 6
+    data[6] = (0.4 + 0.445 + 0.437 + 0.462 + 0.447 + 0.44) / 6
     data[7] = (0.412 + 0.475 + 0.448 + 0.446 + 0.438 + 0.478) / 6
     data[8] = (0.441 + 0.439 + 0.435 + 0.422 + 0.462 + 0.447) / 6
     data[9] = (0.457 + 0.463 + 0.434 + 0.454 + 0.476 + 0.46) / 6
-    data[10] = (0.449 + 0.421 + 0.485 + 0.455 + 0.424 + 0.458) / 6
+    data[10] = (0.449 + 0.441 + 0.485 + 0.455 + 0.424 + 0.458) / 6
     plot.plot(list(sorted(data.keys())), list(v for k, v in sorted(data.items())), marker=".",
               label='number of features = 1.1 * sqrt(n)', linewidth=1)
+
+    data = {}
+    data[3] = (0.399 + 0.419 + 0.45) / 3
+    data[4] = (0.41 + 0.439 + 0.382 + 0.444 + 0.381 + 0.406) / 6
+    data[5] = (0.413 + 0.465 + 0.43 + 0.467 + 0.405 + 0.453) / 6
+    data[6] = (0.462 + 0.451 + 0.464 + 0.425 + 0.464 + 0.393) / 6
+    data[7] = (0.401 + 0.441 + 0.475) / 3
+    data[8] = (0.393 + 0.418 + 0.436 + 0.438 + 0.447 + 0.473) / 6
+    data[9] = (0.436 + 0.467 + 0.422) / 3
+    data[10] = (0.454 + 0.442 + 0.472) / 3
+
+    plot.plot(list(sorted(data.keys())), list(v for k, v in sorted(data.items())), marker=".",
+              label='number of features = 1.2 * sqrt(n)', linewidth=1)
 
     data = {}
     data[3] = (0.416 + 0.459 + 0.434 + 0.436 + 0.381 + 0.417) / 6
@@ -586,7 +599,19 @@ def rf_d_b():
     plot.show()
 
 
-rf_d_b()
+def hist():
+    # plot.hist(x=[0.447, 0.508, 0.521], bins=3)
+    x = [1, 2, 3]
+    plot.bar(x, height=[0.447, 0.508, 0.521])
+    plot.xticks(x, ['naive bayes classifier', 'decision tree', 'random forest'])
+    plot.yticks([0, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5, 0.55])
+    plot.grid()
+    plot.show()
+    # plot.legend()
+
+
+# rf_d_b()
+hist()
 # draw_d5_b6()
 # bayes_with()
 # draw_b4_64__l89()
