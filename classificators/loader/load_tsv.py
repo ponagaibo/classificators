@@ -3,6 +3,63 @@ import pandas as pd
 from pprint import pprint as pp
 
 
+def create_with_new_features():
+    df = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом\sport_pool_20190305_20190307', delimiter='\t',
+                     encoding='utf-8', nrows=300000, low_memory=False,
+                     names=['query', 'factors', 'urls', 'target', 'clicks'])
+    df_n = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом\sport_queries_result', delimiter='\t',
+                           encoding='utf-8', nrows=300000, low_memory=False)
+
+    new_dict = df_n.to_dict('')
+    for k, v in new_dict.items():
+        print("{} : {}".format(k, v))
+    f_with_new = open(r'C:\Users\Anastasiya\Desktop\диплом\pool_with_new_features3', 'w', encoding='utf-8', newline='')
+    f_without_new = open(r'C:\Users\Anastasiya\Desktop\диплом\pool_without_new_features3', 'w', encoding='utf-8', newline='')
+
+    with_writer = csv.writer(f_with_new, delimiter='\t')
+    without_writer = csv.writer(f_without_new, delimiter='\t')
+    print(" ~~~ start searching3! ~~~")
+    cnt = 0
+    for f in df_n.values:
+        cur_query = f[0]
+        new_features = f[1:]
+        for ex in df.values:
+            query = str(ex[0])[6:]
+            # facts = list(map(float, facts))
+            if query == cur_query:
+                pp(ex)
+
+                # доделать форму
+                facts = list(str(ex[1])[8:].split())
+                urls = list(str(ex[2])[5:].split())
+                targ = int(str(ex[3])[7:])
+                clicks = list(str(ex[4])[7:].split())
+                clicks = list(map(int, clicks))
+                len_c = len(clicks)
+                if len_c == 0:
+                    continue
+
+                facts = list(map(float, str(ex[1])[8:].split()))
+                # print("facts", facts)
+                # cur_list = [query]
+                # cur_list.extend(facts)
+                print(["query=".join(query)])
+                without_writer.writerow(["query="] + facts + urls + targ + clicks)
+
+                # facts.extend(new_features)
+                # print("new f:", new_features)
+                # cur_list = [query]
+                # cur_list.extend(facts)
+                with_writer.writerow([query] + list(facts) + list(new_features) + urls + targ + clicks)
+
+        if cnt % 500 == 0:
+            print("found", cnt)
+        cnt += 1
+
+    f_with_new.close()
+    f_without_new.close()
+
+
 def load_pool(file, half_size=None, stop_size=None, my_features=False):
     if file == "pool":
         filename = "\sport_pool_20190305_20190307"
@@ -269,8 +326,6 @@ def load_pool(file, half_size=None, stop_size=None, my_features=False):
             # query_facts.append(int(top14))
             # query_facts.append(int(top15))
 
-            query_facts.append(num_of_clicks)
-
             # query_facts.append(clicks1)
             # query_facts.append(clicks2)
             # query_facts.append(clicks3)
@@ -287,6 +342,7 @@ def load_pool(file, half_size=None, stop_size=None, my_features=False):
             # query_facts.append(clicks14)
             # query_facts.append(clicks15)
 
+            query_facts.append(num_of_clicks)
             query_facts.append(sport_amount)
             query_facts.append(fh_amount)
             query_facts.append(num_clicked_sport)

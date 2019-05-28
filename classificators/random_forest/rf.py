@@ -144,7 +144,7 @@ def count_all_freqs(examples):
 
 def best_question(examples, rf=False):
     n_features = len(examples[0][0]) - 1
-    feature_amount = math.sqrt(n_features) * 1.1
+    feature_amount = math.sqrt(n_features) * 1.0
     all_freqs = count_all_freqs(examples)
     best_gain_ratio = 0
     best_q = None
@@ -229,7 +229,7 @@ def build_tree(examples, cur_depth, rf=False):
         # print("    Max leaf size is reached!")
         return Leaf(examples)
     if cur_depth == MAX_DEPTH:
-        print("max depth reached!")
+        # print("max depth is reached!")
         return Leaf(examples)
     gain, question = best_question(examples, rf)
     if gain == 0:
@@ -433,15 +433,22 @@ def main():
 
 
 start_time = time.time()
+
 # orig_stdout = sys.stdout
-# f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\rf_12_sq', 'w')
+# f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\rf_10_sq_add', 'w')
 # sys.stdout = f
 # for MAX_DEPTH in range(3, 11):
-#     for NUM_OF_BUCKETS in range(4, 10, 2):
-main()
+#     for NUM_OF_BUCKETS in range(10, 14, 2):
+#         main()
+# print("done first part")
+# for MAX_DEPTH in range(3, 11):
+#     for NUM_OF_BUCKETS in range(10, 14, 2):
+#         main()
 # sys.stdout = orig_stdout
 # f.close()
-print("done rf 1.2")
+
+main()
+print("done rf 1.0")
 end_time = time.time()
 diff = end_time - start_time
 print("~~~ %s sec ~~~" % diff)

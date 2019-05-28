@@ -1,3 +1,5 @@
+import sys
+
 from math import ceil
 import random
 from pprint import pprint as pp
@@ -7,8 +9,8 @@ from loader import load_tsv
 import cProfile
 
 
-MAX_DEPTH = 4  # 40
-NUM_OF_BUCKETS = 32  # 16
+MAX_DEPTH = 10  # 40
+NUM_OF_BUCKETS = 8  # 16
 LEAF_SIZE = 431  # 55
 UNIFORM = False
 # попробовать 256 33, 400 301, 415 11, 128 11, 256 101, 400 33
@@ -282,7 +284,7 @@ def build_tree(examples, cur_depth):
         # print("    Max leaf size is reached!")
         return Leaf(examples)
     if cur_depth == MAX_DEPTH:
-        print("    Max depth is reached!")
+        # print("    Max depth is reached!")
         return Leaf(examples)
 
     gain, question = best_question(examples)
@@ -448,9 +450,9 @@ def measure(dataset, tree, weight, train_size, pivot):
 
 
 def main():
-    my_f = True
+    my_f = False
     filename = "shuffled"
-    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=100000)
+    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=25000)
 
     print("c4.5")
     print("file:", filename)
@@ -499,7 +501,17 @@ start_time = time.time()
 
 # pr = cProfile.Profile()
 # pr.enable()
-main()
+
+orig_stdout = sys.stdout
+f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\dt_without_d10_b8_25k3', 'w')
+sys.stdout = f
+for MAX_DEPTH in range(2, 22):
+    main()
+for MAX_DEPTH in range(2, 22):
+    main()
+sys.stdout = orig_stdout
+f.close()
+
 # pr.disable()
 
 end_time = time.time()

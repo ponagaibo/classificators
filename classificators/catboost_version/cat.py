@@ -5,6 +5,7 @@ import pandas as pd
 from pprint import pprint as pp
 import numpy as np
 
+from loader import load_tsv
 
 UNIFORM = False
 
@@ -130,6 +131,10 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
         filename = "\out_allowed"
     elif file == "shuffled":
         filename = "\shuf"
+    elif file == "with_new_f":
+        filename = "\pool_with_new_features2"
+    elif file == "without_new_f":
+        filename = "\pool_without_new_features2"
     else:
         print("filename error")
 
@@ -443,8 +448,9 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
 
 
 def main():
-    my_f = True
+    my_f = False
     filename = "shuffled"
+    # load_tsv.create_with_new_features()
     data, target = load_pool2(filename, my_features=my_f, stop_size=100000)
     split_ratio = 0.8
 
@@ -470,7 +476,7 @@ def main():
     test_data = test_set[0]
 
     print("classifying...")
-    weight = 0.78
+    weight = fract
     print("weight of class 1:", weight)
     model = CatBoostClassifier(iterations=1500, class_weights=[1, fract])
     model.fit(train_data, train_labels)
