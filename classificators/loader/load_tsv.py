@@ -60,6 +60,52 @@ def create_with_new_features():
     f_without_new.close()
 
 
+def add_new_features():
+    file_new_features = open(r'C:\Users\Anastasiya\Desktop\диплом\sport_queries_result', 'r', encoding='utf-8')  # new features
+    pool = open(r'C:\Users\Anastasiya\Desktop\диплом\shuf', 'r', encoding='utf-8')  # original pool
+
+    res = open(r'C:\Users\Anastasiya\Desktop\диплом\with_new_f', 'w', encoding='utf-8')  # output
+
+    new_features = {}
+
+    for line in file_new_features:
+        parts = line.split('\t')
+        cur = ''
+        n = 0
+        for i in range(1, len(parts)):
+            if i < len(parts) - 1:
+                cur += parts[i] + ' '
+            else:
+                cur += parts[i].rstrip()
+        new_features[parts[0]] = cur
+
+    n = len(new_features['результат матча урал спартак 7марта 2019 года'].split(' '))
+    zeros = ('0 ' * n).rstrip()
+
+    i = 0
+    LIMIT = 170000
+    for line in pool:
+        parts = line.split('\t')
+        parts[-1] = parts[-1].rstrip()
+        query = parts[0].split('=')[1]
+        new_f = new_features.get(query, zeros)
+        if new_f != zeros:
+            print(i)
+
+        for part in parts:
+            res.write(part + '\t')
+
+        res.write('new_factors=' + new_f + '\n')
+
+        i += 1
+        if i >= LIMIT:
+            break
+
+    pool.close()
+    file_new_features.close()
+    res.close()
+
+
 def load_pool(file, half_size=None, stop_size=None, my_features=False):
     if file == "pool":
         filename = "\sport_pool_20190305_20190307"

@@ -123,6 +123,8 @@ def print_importances(clf):
 
 # sport_pool_20190305_20190307
 def load_pool2(file, half_size=None, stop_size=None, my_features=False):
+    new_f=False
+    n = ['query', 'factors', 'urls', 'target', 'clicks']
     if file == "pool":
         filename = "\sport_pool_20190305_20190307"
     elif file == "common":
@@ -132,15 +134,15 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
     elif file == "shuffled":
         filename = "\shuf"
     elif file == "with_new_f":
-        filename = "\pool_with_new_features2"
-    elif file == "without_new_f":
-        filename = "\pool_without_new_features2"
+        filename = "\with_new_f"
+        new_f = True
+        n = ['query', 'factors', 'urls', 'target', 'clicks', 'new_factors']
     else:
         print("filename error")
 
     df = pd.read_csv(r'C:\Users\Anastasiya\Desktop\диплом' + filename, delimiter='\t',
                      encoding='utf-8', nrows=300000, low_memory=False,
-                     names=['query', 'factors', 'urls', 'target', 'clicks'])
+                     names=n)
 
     cnt = 0
     data = []
@@ -148,28 +150,42 @@ def load_pool2(file, half_size=None, stop_size=None, my_features=False):
     cnt0 = 0
     cnt1 = 0
     len_of_facts = len(list(str(df.values[0][1])[8:].split()))
+    if new_f:
+        len_of_facts += 12
 
     # print("len:", len_of_facts)
     for ex in df.values:
         query = str(ex[0])[6:]
-
+        # print("query", query)
+        # print(ex[0])
+        # print("0")
         if query == "":
             continue
 
+        # pp(ex)
         facts = list(str(ex[1])[8:].split())
+        if new_f:
+            new_facts = list(str(ex[5])[12:].split())
+            facts.extend(new_facts)
+        # print("facts", facts)
         urls = list(str(ex[2])[5:].split())
+        # print("urls", urls)
         targ = int(str(ex[3])[7:])
+        # print("targ", targ)
         clicks = list(str(ex[4])[7:].split())
         clicks = list(map(int, clicks))
         len_c = len(clicks)
+        # print("1")
         if len_c == 0:
             continue
         # if len_c != 10 and len_c != 15:
         #     print("{}: len of clicks: {}".format(cnt, len(clicks)))
-
+        # print("2")
         if len(facts) != len_of_facts:
+            # print('len', len(facts))
+            # print("l", len_of_facts)
             continue
-
+        # print("3")
         cur_list = [query]
         query_facts = facts[:]  #
 
@@ -478,7 +494,7 @@ def main():
     print("classifying...")
     weight = fract
     print("weight of class 1:", weight)
-    model = CatBoostClassifier(iterations=1500, class_weights=[1, fract])
+    model = CatBoostClassifier(iterations=750, class_weights=[1, fract])
     model.fit(train_data, train_labels)
     prediction = model.predict(test_data)
 

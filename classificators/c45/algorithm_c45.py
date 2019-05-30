@@ -452,7 +452,7 @@ def measure(dataset, tree, weight, train_size, pivot):
 def main():
     my_f = False
     filename = "shuffled"
-    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=25000)
+    data, target = load_tsv.load_pool(filename, my_features=my_f, stop_size=50000)
 
     print("c4.5")
     print("file:", filename)
@@ -489,8 +489,8 @@ def main():
     # print("    adding weights to values in class...")
     weight = class_fract  # при 0.22 ставит мало класса 1, при 0.6 чаще
     print("    weight =", weight)
-    print("checking training set...")
-    measure(modified_train_set, root, weight, train_size, pivot)
+    # print("checking training set...")
+    # measure(modified_train_set, root, weight, train_size, pivot)
 
     print("classifying...")
     f1_m = measure(modified_test_set, root, weight, train_size, pivot)
@@ -503,8 +503,9 @@ start_time = time.time()
 # pr.enable()
 
 orig_stdout = sys.stdout
-f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\dt_without_d10_b8_25k3', 'w')
+f = open(r'C:\Users\Anastasiya\Desktop\диплом\outs\dt_50k_16b_twice_without_w', 'w')
 sys.stdout = f
+NUM_OF_BUCKETS = 16
 for MAX_DEPTH in range(2, 22):
     main()
 for MAX_DEPTH in range(2, 22):
@@ -513,6 +514,8 @@ sys.stdout = orig_stdout
 f.close()
 
 # pr.disable()
+
+# main()
 
 end_time = time.time()
 diff = end_time - start_time
